@@ -2,12 +2,12 @@ package com.thebirdhouse.plugin;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.NPC;
-import net.runelite.api.events.NpcLootReceived;
 import net.runelite.api.ItemComposition;
-import net.runelite.client.eventbus.Subscribe;
+import net.runelite.api.NPCComposition;
+import net.runelite.client.events.ServerNpcLoot;
 import net.runelite.client.game.ItemManager;
-import net.runelite.http.api.loot.LootRecordType;
+import net.runelite.client.game.ItemStack;
+import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -61,23 +61,24 @@ public class DropMatcher {
     }
 
     @Subscribe
-    public void onNpcLootReceived(NpcLootReceived event) {
+    public void onServerNpcLoot(ServerNpcLoot event) {
         if (!config.autoSubmitDrops() || activeBoard == null) {
             return;
         }
 
-        NPC npc = event.getNpc();
-        String npcName = npc.getName();
+        NPCComposition npcComp = event.getComposition();
+        String npcName = npcComp != null ? npcComp.getName() : "Unknown";
 
-        event.getItems().forEach(itemStack -> {
-            String itemName = itemManager.getItemComposition(itemStack.getId()).getName();
+        for (ItemStack itemStack : event.getItems()) {
+            ItemComposition itemComp = itemManager.getItemComposition(itemStack.getId());
+            String itemName = itemComp.getName();
             int quantity = itemStack.getQuantity();
 
             List<TileMatch> matches = findMatches(npcName, itemName, quantity);
             for (TileMatch match : matches) {
                 submitMatch(match, npcName, itemName, quantity);
             }
-        });
+        }
     }
 
     private List<TileMatch> findMatches(String npcName, String itemName, int quantity) {

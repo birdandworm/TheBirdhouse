@@ -63,7 +63,7 @@ public class BirdhouseApiClient {
 
                 try (Response response = httpClient.newCall(request).execute()) {
                     if (response.isSuccessful()) {
-                        log.info("Proof submitted successfully for tile: {}", payload.tileName);
+                        log.info("Proof submitted successfully for tile: {}", payload.getTileName());
                         return true;
                     } else {
                         log.warn("Proof submission failed: {} {}", response.code(), response.message());
