@@ -37,8 +37,15 @@ public class DropMatcher {
     @Inject
     private ScreenshotHelper screenshotHelper;
 
+    @Inject
+    private BirdhouseOverlay overlay;
+
     private BoardData activeBoard;
     private String activeRoomCode;
+
+    public BoardData getActiveBoard() {
+        return activeBoard;
+    }
 
     public void loadActiveBoard(String roomCode) {
         if (roomCode == null || roomCode.isEmpty()) {
@@ -141,6 +148,9 @@ public class DropMatcher {
                     "[Birdhouse] Proof submitted: " + match.getTileName() + " (" + itemName + ")",
                     ""
                 );
+            }
+            if (success) {
+                overlay.setLastMatch(match.getTileName(), itemName);
             }
         });
 

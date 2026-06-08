@@ -123,4 +123,33 @@ public class BirdhouseApiClient {
             }
         });
     }
+
+    /**
+     * Fetch the player's active rooms for auto-detection.
+     */
+    public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Request request = new Request.Builder()
+                    .url(BASE_URL + "/active-rooms")
+                    .header("Authorization", "Bearer " + authToken)
+                    .get()
+                    .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String body = response.body().string();
+                        JsonObject obj = gson.fromJson(body, JsonObject.class);
+                        if (obj.has("rooms")) {
+                            ActiveRoom[] rooms = gson.fromJson(obj.get("rooms"), ActiveRoom[].class);
+                            return java.util.Arrays.asList(rooms);
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                log.error("Failed to fetch active rooms", e);
+            }
+            return java.util.Collections.emptyList();
+        });
+    }
 }

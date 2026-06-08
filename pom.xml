@@ -58,6 +58,12 @@
             <version>5.1.0</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

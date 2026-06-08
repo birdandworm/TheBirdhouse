@@ -86,6 +86,17 @@ public interface BirdhouseConfig extends Config {
     String activitySection = "activity";
 
     @ConfigItem(
+        keyName = "showOverlay",
+        name = "Show Overlay",
+        description = "Display tile progress overlay on the game screen",
+        section = dropsSection,
+        position = 3
+    )
+    default boolean showOverlay() {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "trackActivity",
         name = "Track Play Sessions",
         description = "Report session start/end to The Birdhouse for activity tracking",

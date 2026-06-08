@@ -7,11 +7,20 @@ A [RuneLite](https://runelite.net/) plugin for [The Birdhouse](https://thebirdho
 ### Drop Auto-Submit
 Automatically detects when you receive a drop that matches a tile on your active Birdhouse game board. Submits proof instantly — no alt-tabbing or screenshot uploading needed.
 
+### Achievement Tracking
+Detects collection log additions, quest completions, level-ups, and pet drops. If any match a tile on your board, proof is auto-submitted.
+
 ### Screenshot Capture
 Attaches an automatic screenshot at the moment of the drop for verification.
 
 ### Activity Tracking
 Tracks your play sessions so your clan can see who's active. Reports login/logout and periodic heartbeats (every 5 minutes).
+
+### In-Game Overlay
+Shows your current tile progress (completed/remaining) in the top-left corner. Displays the last matched drop for 30 seconds.
+
+### Sidebar Panel
+Full board view in RuneLite's sidebar — see all your tiles, what's completed, and what's left. Click refresh to sync with the server.
 
 ### In-Game Notifications
 Get a chat message when your proof is submitted and processed.
@@ -33,6 +42,7 @@ Get a chat message when your proof is submitted and processed.
 | Auto-Submit Drops | On | Automatically submit matching drops |
 | Include Screenshot | On | Attach screenshot with submissions |
 | Chat Notification | On | Show game chat message on submission |
+| Show Overlay | On | Display tile progress on game screen |
 | Track Play Sessions | On | Report session time to The Birdhouse |
 
 ## Supported Game Modes
