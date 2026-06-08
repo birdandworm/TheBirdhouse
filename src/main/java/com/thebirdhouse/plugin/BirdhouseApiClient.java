@@ -19,21 +19,17 @@ import java.util.concurrent.CompletableFuture;
 public class BirdhouseApiClient {
 
     private static final String BASE_URL = "https://thebirdhouse.games/api/plugin";
-    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-    private static final MediaType IMAGE = MediaType.parse("image/jpeg");
+    private static final MediaType JSON_TYPE = MediaType.parse("application/json; charset=utf-8");
+    private static final MediaType IMAGE_TYPE = MediaType.parse("image/jpeg");
 
     private final OkHttpClient httpClient;
     private final Gson gson;
     private String authToken = "";
 
     @Inject
-    public BirdhouseApiClient() {
-        this.httpClient = new OkHttpClient.Builder()
-            .connectTimeout(java.time.Duration.ofSeconds(10))
-            .writeTimeout(java.time.Duration.ofSeconds(30))
-            .readTimeout(java.time.Duration.ofSeconds(15))
-            .build();
-        this.gson = new Gson();
+    public BirdhouseApiClient(OkHttpClient httpClient, Gson gson) {
+        this.httpClient = httpClient;
+        this.gson = gson;
     }
 
     public void setAuthToken(String token) {
@@ -52,7 +48,7 @@ public class BirdhouseApiClient {
 
                 if (screenshot != null && screenshot.length > 0) {
                     builder.addFormDataPart("screenshot", "proof.jpg",
-                        RequestBody.create(IMAGE, screenshot));
+                        RequestBody.create(IMAGE_TYPE, screenshot));
                 }
 
                 Request request = new Request.Builder()
@@ -110,7 +106,7 @@ public class BirdhouseApiClient {
                 Request request = new Request.Builder()
                     .url(BASE_URL + "/session")
                     .header("Authorization", "Bearer " + authToken)
-                    .post(RequestBody.create(JSON, gson.toJson(event)))
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(event)))
                     .build();
 
                 try (Response response = httpClient.newCall(request).execute()) {
