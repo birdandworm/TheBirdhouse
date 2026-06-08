@@ -52,7 +52,7 @@ public class BirdhouseApiClient {
 
                 if (screenshot != null && screenshot.length > 0) {
                     builder.addFormDataPart("screenshot", "proof.jpg",
-                        RequestBody.create(screenshot, IMAGE));
+                        RequestBody.create(IMAGE, screenshot));
                 }
 
                 Request request = new Request.Builder()
@@ -110,7 +110,7 @@ public class BirdhouseApiClient {
                 Request request = new Request.Builder()
                     .url(BASE_URL + "/session")
                     .header("Authorization", "Bearer " + authToken)
-                    .post(RequestBody.create(gson.toJson(event), JSON))
+                    .post(RequestBody.create(JSON, gson.toJson(event)))
                     .build();
 
                 try (Response response = httpClient.newCall(request).execute()) {
