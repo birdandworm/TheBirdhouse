@@ -1,0 +1,20 @@
+# Build
+target/
+build/
+
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+*.swp
+*.swo
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+*.log
