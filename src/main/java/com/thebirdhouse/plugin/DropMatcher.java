@@ -89,6 +89,13 @@ public class DropMatcher {
 
         for (BoardTile tile : activeBoard.getTiles()) {
             if (tile.isCompleted()) continue;
+            if (tile.getSpecial() != null) continue;
+
+            // For tile race, only match the tile the player is currently on
+            if ("tilerace".equals(tile.getGameType()) && !tile.isCurrent()) continue;
+
+            // For chip drop, only match available (unlocked) tiles
+            if ("chipdrop".equals(tile.getGameType()) && !tile.isAvailable()) continue;
 
             if (matchesTile(tile, npcName, itemName)) {
                 matches.add(new TileMatch(tile.getKey(), tile.getName(), tile.getGameType()));
