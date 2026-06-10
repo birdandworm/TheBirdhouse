@@ -66,10 +66,15 @@ public class BirdhousePlugin extends Plugin {
         overlayManager.add(birdhouseOverlay);
 
         // Register sidebar panel
-        final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/panel_icon.png");
+        BufferedImage icon;
+        try {
+            icon = ImageUtil.loadImageResource(getClass(), "/panel_icon.png");
+        } catch (Exception e) {
+            icon = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        }
         navButton = NavigationButton.builder()
             .tooltip("The Birdhouse")
-            .icon(icon != null ? icon : new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB))
+            .icon(icon)
             .priority(10)
             .panel(birdhousePanel)
             .build();
