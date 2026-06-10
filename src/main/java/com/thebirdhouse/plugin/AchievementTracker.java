@@ -138,21 +138,31 @@ public class AchievementTracker {
         payload.setQuantity(1);
         payload.setTimestamp(System.currentTimeMillis());
 
-        byte[] screenshot = null;
         if (config.includeScreenshot()) {
-            screenshot = screenshotHelper.capture();
+            screenshotHelper.captureAsync(screenshot -> {
+                apiClient.submitProof(payload, screenshot).thenAccept(success -> {
+                    if (success && config.notifyOnSubmit()) {
+                        client.addChatMessage(
+                            ChatMessageType.GAMEMESSAGE,
+                            "",
+                            "[Birdhouse] Achievement matched: " + tile.getName() + " (" + achievementName + ")",
+                            ""
+                        );
+                    }
+                });
+            });
+        } else {
+            apiClient.submitProof(payload, null).thenAccept(success -> {
+                if (success && config.notifyOnSubmit()) {
+                    client.addChatMessage(
+                        ChatMessageType.GAMEMESSAGE,
+                        "",
+                        "[Birdhouse] Achievement matched: " + tile.getName() + " (" + achievementName + ")",
+                        ""
+                    );
+                }
+            });
         }
-
-        apiClient.submitProof(payload, screenshot).thenAccept(success -> {
-            if (success && config.notifyOnSubmit()) {
-                client.addChatMessage(
-                    ChatMessageType.GAMEMESSAGE,
-                    "",
-                    "[Birdhouse] Achievement matched: " + tile.getName() + " (" + achievementName + ")",
-                    ""
-                );
-            }
-        });
 
         log.info("Achievement matched tile '{}': {} ({})", tile.getName(), achievementName, achievementType);
     }

@@ -149,11 +149,18 @@ public class DropMatcher {
         payload.setQuantity(quantity);
         payload.setTimestamp(System.currentTimeMillis());
 
-        byte[] screenshot = null;
         if (config.includeScreenshot()) {
-            screenshot = screenshotHelper.capture();
+            screenshotHelper.captureAsync(screenshot -> {
+                doSubmit(payload, screenshot, match, itemName);
+            });
+        } else {
+            doSubmit(payload, null, match, itemName);
         }
 
+        log.info("Drop matched tile '{}': {} from {}", match.getTileName(), itemName, npcName);
+    }
+
+    private void doSubmit(ProofPayload payload, byte[] screenshot, TileMatch match, String itemName) {
         apiClient.submitProof(payload, screenshot).thenAccept(success -> {
             if (success && config.notifyOnSubmit()) {
                 client.addChatMessage(
@@ -167,7 +174,5 @@ public class DropMatcher {
                 overlay.setLastMatch(match.getTileName(), itemName);
             }
         });
-
-        log.info("Drop matched tile '{}': {} from {}", match.getTileName(), itemName, npcName);
     }
 }

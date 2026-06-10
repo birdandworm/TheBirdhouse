@@ -2,21 +2,27 @@ package com.thebirdhouse.plugin;
 
 import lombok.Data;
 
-/**
- * A single tile from the board, used for drop matching and panel display.
- */
 @Data
 public class BoardTile {
-    private String key;       // Tile identifier (e.g. "2-3" for bingo, "5" for tile race)
-    private String name;      // Display name
-    private String matchName; // Name to match against drops (OSRS wiki name)
-    private String gameType;  // bingo, tilerace, territory_attack, etc.
+    private String key;
+    private String name;
+    private String matchName;
+    private String gameType;
     private boolean completed;
-    private boolean current;   // True if this is the player's current tile (tile race)
-    private boolean available; // True if tile is claimable (chip drop)
-    private boolean free;      // True if this is a free space (bingo)
-    private boolean anyUnique; // If true, any unique drop from the matched NPC counts
-    private String special;    // Special tile type for tile race (start, finish, forward, backward)
-    private String region;     // Territory region name
-    private int quantity;      // How many drops needed (default 1)
+    private boolean current;
+    private boolean available;
+    private boolean free;
+    private boolean anyUnique;
+    private String special;
+    private String region;
+    private int quantity;
+
+    // Territory War extras
+    private String territoryName;
+    private boolean ours;
+    private boolean attackable;
+    private int defenseLevel;
+
+    // Battleship extras
+    private String attackResult; // "hit", "miss", or null
 }

@@ -293,6 +293,11 @@ public class BirdhousePanel extends PluginPanel {
         }
     }
 
+    private static final Color COLOR_OPPONENT = new Color(220, 80, 80);
+    private static final Color COLOR_HIT = new Color(220, 60, 60);
+    private static final Color COLOR_MISS = new Color(80, 80, 120);
+    private static final Color COLOR_ATTACKABLE = new Color(220, 140, 60);
+
     private int calculateCellSize(int cols, int rows) {
         int availableWidth = PANEL_WIDTH - 28; // padding + border
         int cellWithGap = availableWidth / cols;
@@ -304,6 +309,11 @@ public class BirdhousePanel extends PluginPanel {
         int rows = board.getRows();
         int cols = board.getCols();
         if (rows == 0 || cols == 0) return new JPanel();
+
+        // For battleship, show two grids (attack + defense)
+        if ("battleship".equals(board.getGameType())) {
+            return renderBattleshipGrids(board);
+        }
 
         int cellSize = calculateCellSize(cols, rows);
 
@@ -347,6 +357,98 @@ public class BirdhousePanel extends PluginPanel {
         wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
         wrapper.add(grid);
         return wrapper;
+    }
+
+    private JPanel renderBattleshipGrids(BoardData board) {
+        int rows = board.getRows();
+        int cols = board.getCols();
+        int cellSize = calculateCellSize(cols, rows);
+
+        JPanel container = new JPanel();
+        container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
+        container.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        // Attack grid (our shots on their board)
+        JLabel attackLabel = new JLabel("Your Attacks:");
+        attackLabel.setForeground(COLOR_BRAND);
+        attackLabel.setFont(attackLabel.getFont().deriveFont(Font.BOLD, 10f));
+        attackLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        container.add(attackLabel);
+        container.add(Box.createVerticalStrut(2));
+
+        JPanel attackGrid = new JPanel(new GridLayout(rows, cols, 1, 1));
+        attackGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        List<BoardTile> tiles = board.getTiles();
+        int tileIdx = 0;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                JPanel cell = new JPanel();
+                cell.setPreferredSize(new Dimension(cellSize, cellSize));
+                if (tileIdx < tiles.size()) {
+                    BoardTile tile = tiles.get(tileIdx);
+                    String result = tile.getAttackResult();
+                    if ("hit".equals(result)) {
+                        cell.setBackground(COLOR_HIT);
+                        cell.setToolTipText("\u2716 HIT: " + tile.getName());
+                    } else if ("miss".equals(result)) {
+                        cell.setBackground(COLOR_MISS);
+                        cell.setToolTipText("\u25CB Miss");
+                    } else {
+                        cell.setBackground(COLOR_INCOMPLETE);
+                        cell.setToolTipText(tile.getName());
+                    }
+                    tileIdx++;
+                } else {
+                    cell.setBackground(COLOR_LOCKED);
+                }
+                attackGrid.add(cell);
+            }
+        }
+        JPanel attackWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        attackWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        attackWrapper.add(attackGrid);
+        container.add(attackWrapper);
+
+        // Defense grid (their shots on our board)
+        BoardData.BattleshipMeta meta = board.getBattleshipMeta();
+        if (meta != null && meta.getDefenseGrid() != null) {
+            container.add(Box.createVerticalStrut(6));
+            JLabel defLabel = new JLabel("Your Fleet:");
+            defLabel.setForeground(COLOR_BRAND);
+            defLabel.setFont(defLabel.getFont().deriveFont(Font.BOLD, 10f));
+            defLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            container.add(defLabel);
+            container.add(Box.createVerticalStrut(2));
+
+            java.util.Map<String, String> defGrid = meta.getDefenseGrid();
+            JPanel defenseGrid = new JPanel(new GridLayout(rows, cols, 1, 1));
+            defenseGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    JPanel cell = new JPanel();
+                    cell.setPreferredSize(new Dimension(cellSize, cellSize));
+                    String key = r + "-" + c;
+                    String defResult = defGrid.get(key);
+                    if ("hit".equals(defResult)) {
+                        cell.setBackground(COLOR_HIT);
+                        cell.setToolTipText("Enemy hit here!");
+                    } else if ("miss".equals(defResult)) {
+                        cell.setBackground(COLOR_MISS);
+                        cell.setToolTipText("Enemy missed");
+                    } else {
+                        cell.setBackground(new Color(50, 70, 90));
+                        cell.setToolTipText("Safe");
+                    }
+                    defenseGrid.add(cell);
+                }
+            }
+            JPanel defWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            defWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
+            defWrapper.add(defenseGrid);
+            container.add(defWrapper);
+        }
+
+        return container;
     }
 
     private JPanel renderChipDropBoard(BoardData board) {
@@ -404,6 +506,14 @@ public class BirdhousePanel extends PluginPanel {
         int totalRows = (int) Math.ceil(tiles.size() / (double) tilesPerRow);
         int cellSize = calculateCellSize(tilesPerRow, totalRows);
 
+        // Gather opponent positions
+        java.util.Set<Integer> opponentPositions = new java.util.HashSet<>();
+        if (board.getOpponents() != null) {
+            for (BoardData.OpponentPosition opp : board.getOpponents()) {
+                opponentPositions.add(opp.getPosition());
+            }
+        }
+
         JPanel track = new JPanel(new GridLayout(totalRows, tilesPerRow, 1, 1));
         track.setBackground(ColorScheme.DARK_GRAY_COLOR);
         track.setBorder(new EmptyBorder(4, 4, 4, 4));
@@ -427,7 +537,11 @@ public class BirdhousePanel extends PluginPanel {
                     cell.setToolTipText(tile.getName());
                 } else if (tile.isCurrent()) {
                     cell.setBackground(COLOR_CURRENT);
-                    cell.setToolTipText("\u25B6 " + tile.getName() + " (current)");
+                    cell.setToolTipText("\u25B6 " + tile.getName() + " (YOU)");
+                } else if (opponentPositions.contains(i)) {
+                    cell.setBackground(COLOR_OPPONENT);
+                    String oppNames = getOpponentNamesAt(board, i);
+                    cell.setToolTipText("\u2716 " + tile.getName() + " (" + oppNames + ")");
                 } else if (tile.isCompleted()) {
                     cell.setBackground(COLOR_COMPLETED);
                     cell.setToolTipText("\u2713 " + tile.getName());
@@ -448,6 +562,14 @@ public class BirdhousePanel extends PluginPanel {
         return wrapper;
     }
 
+    private String getOpponentNamesAt(BoardData board, int position) {
+        if (board.getOpponents() == null) return "Opponent";
+        return board.getOpponents().stream()
+            .filter(o -> o.getPosition() == position)
+            .map(BoardData.OpponentPosition::getName)
+            .collect(Collectors.joining(", "));
+    }
+
     private JPanel renderTerritoryBoard(BoardData board) {
         List<BoardTile> tiles = board.getTiles();
 
@@ -456,28 +578,70 @@ public class BirdhousePanel extends PluginPanel {
         panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         panel.setBorder(new EmptyBorder(4, 4, 4, 4));
 
-        java.util.Map<String, List<BoardTile>> byRegion = tiles.stream()
-            .collect(Collectors.groupingBy(t -> t.getRegion() != null ? t.getRegion() : "Unknown"));
+        // Group tiles by status: ours, attackable, enemy
+        List<BoardTile> ourTiles = tiles.stream().filter(BoardTile::isOurs).collect(Collectors.toList());
+        List<BoardTile> attackable = tiles.stream().filter(t -> t.isAttackable() && !t.isOurs()).collect(Collectors.toList());
+        List<BoardTile> enemyLocked = tiles.stream().filter(t -> !t.isOurs() && !t.isAttackable()).collect(Collectors.toList());
 
-        for (java.util.Map.Entry<String, List<BoardTile>> entry : byRegion.entrySet()) {
-            JPanel regionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 1));
-            regionRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
-            regionRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
-
-            JLabel regionLabel = new JLabel(entry.getKey() + ":");
-            regionLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            regionLabel.setFont(regionLabel.getFont().deriveFont(10f));
-            regionRow.add(regionLabel);
-
-            for (BoardTile tile : entry.getValue()) {
+        // Our territories
+        if (!ourTiles.isEmpty()) {
+            JPanel section = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 2));
+            section.setBackground(ColorScheme.DARK_GRAY_COLOR);
+            section.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+            JLabel label = new JLabel("Yours (" + ourTiles.size() + "):");
+            label.setForeground(COLOR_COMPLETED);
+            label.setFont(label.getFont().deriveFont(10f));
+            section.add(label);
+            for (BoardTile tile : ourTiles) {
                 JPanel dot = new JPanel();
                 dot.setPreferredSize(new Dimension(10, 10));
-                dot.setBackground(tile.isCompleted() ? COLOR_COMPLETED : COLOR_INCOMPLETE);
-                dot.setToolTipText(tile.getName());
-                regionRow.add(dot);
+                dot.setBackground(COLOR_COMPLETED);
+                String tip = tile.getTerritoryName() != null ? tile.getTerritoryName() : tile.getName();
+                if (tile.getDefenseLevel() > 0) tip += " +" + tile.getDefenseLevel() + " def";
+                dot.setToolTipText(tip);
+                section.add(dot);
             }
+            panel.add(section);
+        }
 
-            panel.add(regionRow);
+        // Attackable territories
+        if (!attackable.isEmpty()) {
+            JPanel section = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 2));
+            section.setBackground(ColorScheme.DARK_GRAY_COLOR);
+            section.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+            JLabel label = new JLabel("\u2694 Attack (" + attackable.size() + "):");
+            label.setForeground(COLOR_ATTACKABLE);
+            label.setFont(label.getFont().deriveFont(10f));
+            section.add(label);
+            for (BoardTile tile : attackable) {
+                JPanel dot = new JPanel();
+                dot.setPreferredSize(new Dimension(10, 10));
+                dot.setBackground(COLOR_ATTACKABLE);
+                String tip = (tile.getTerritoryName() != null ? tile.getTerritoryName() : tile.getName());
+                if (tile.getDefenseLevel() > 0) tip += " +" + tile.getDefenseLevel() + " def";
+                dot.setToolTipText(tip);
+                section.add(dot);
+            }
+            panel.add(section);
+        }
+
+        // Enemy (not adjacent)
+        if (!enemyLocked.isEmpty()) {
+            JPanel section = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 2));
+            section.setBackground(ColorScheme.DARK_GRAY_COLOR);
+            section.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+            JLabel label = new JLabel("Enemy (" + enemyLocked.size() + "):");
+            label.setForeground(COLOR_LOCKED);
+            label.setFont(label.getFont().deriveFont(10f));
+            section.add(label);
+            for (BoardTile tile : enemyLocked) {
+                JPanel dot = new JPanel();
+                dot.setPreferredSize(new Dimension(10, 10));
+                dot.setBackground(COLOR_LOCKED);
+                dot.setToolTipText(tile.getTerritoryName() != null ? tile.getTerritoryName() : tile.getName());
+                section.add(dot);
+            }
+            panel.add(section);
         }
 
         return panel;
@@ -521,15 +685,20 @@ public class BirdhousePanel extends PluginPanel {
         List<BoardTile> tiles = board.getTiles();
 
         if ("tilerace".equals(gameType)) {
-            renderTileRaceList(tiles);
+            renderTileRaceList(tiles, board);
         } else if ("chipdrop".equals(gameType)) {
             renderChipDropList(tiles);
+        } else if ("territory".equals(gameType)) {
+            renderTerritoryList(tiles);
+        } else if ("battleship".equals(gameType)) {
+            renderBattleshipList(tiles);
         } else {
             renderDefaultList(tiles);
         }
     }
 
-    private void renderTileRaceList(List<BoardTile> tiles) {
+    private void renderTileRaceList(List<BoardTile> tiles, BoardData board) {
+        // Current tile
         List<BoardTile> current = tiles.stream()
             .filter(t -> t.isCurrent() && t.getSpecial() == null && !t.isCompleted())
             .collect(Collectors.toList());
@@ -542,20 +711,112 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.add(Box.createVerticalStrut(8));
         }
 
-        List<BoardTile> completed = tiles.stream()
-            .filter(t -> t.isCompleted() && t.getSpecial() == null)
-            .collect(Collectors.toList());
-        if (!completed.isEmpty()) {
-            tilesPanel.add(createSectionHeader("\u2713 Completed (" + completed.size() + ")", COLOR_COMPLETED));
+        // Opponent positions
+        if (board.getOpponents() != null && !board.getOpponents().isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2716 Opponents", COLOR_OPPONENT));
             tilesPanel.add(Box.createVerticalStrut(4));
-            for (BoardTile tile : completed) {
+            for (BoardData.OpponentPosition opp : board.getOpponents()) {
+                JPanel row = new JPanel(new BorderLayout());
+                row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+                row.setBorder(new EmptyBorder(4, 8, 4, 8));
+                row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+                JLabel label = new JLabel("\u2716 " + opp.getName());
+                label.setForeground(COLOR_OPPONENT);
+                label.setFont(label.getFont().deriveFont(11f));
+                row.add(label, BorderLayout.WEST);
+                JLabel posLabel = new JLabel("tile " + opp.getPosition());
+                posLabel.setForeground(new Color(150, 150, 180));
+                posLabel.setFont(posLabel.getFont().deriveFont(10f));
+                row.add(posLabel, BorderLayout.EAST);
+                tilesPanel.add(row);
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        // Remaining
+        List<BoardTile> remaining = tiles.stream()
+            .filter(t -> !t.isCompleted() && !t.isCurrent() && t.getSpecial() == null)
+            .collect(Collectors.toList());
+        if (!remaining.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u25CB Remaining (" + remaining.size() + ")", COLOR_INCOMPLETE));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : remaining) {
+                tilesPanel.add(createTileRow(tile, false, null));
+            }
+        }
+    }
+
+    private void renderTerritoryList(List<BoardTile> tiles) {
+        // Attackable territories (most important)
+        List<BoardTile> attackable = tiles.stream()
+            .filter(t -> t.isAttackable() && !t.isOurs())
+            .collect(Collectors.toList());
+        if (!attackable.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2694 Attackable (" + attackable.size() + ")", COLOR_ATTACKABLE));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : attackable) {
+                String name = tile.getTerritoryName() != null ? tile.getTerritoryName() : tile.getName();
+                String suffix = tile.getDefenseLevel() > 0 ? " [+" + tile.getDefenseLevel() + " def]" : "";
+                JPanel row = new JPanel(new BorderLayout());
+                row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+                row.setBorder(new EmptyBorder(4, 8, 4, 8));
+                row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+                JLabel label = new JLabel("\u2694 " + name + suffix);
+                label.setForeground(COLOR_ATTACKABLE);
+                label.setFont(label.getFont().deriveFont(11f));
+                row.add(label, BorderLayout.WEST);
+                JLabel dropLabel = new JLabel(tile.getName());
+                dropLabel.setForeground(new Color(150, 150, 180));
+                dropLabel.setFont(dropLabel.getFont().deriveFont(9f));
+                row.add(dropLabel, BorderLayout.EAST);
+                tilesPanel.add(row);
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        // Our territories (for fortification)
+        List<BoardTile> ours = tiles.stream().filter(BoardTile::isOurs).collect(Collectors.toList());
+        if (!ours.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2713 Your Territories (" + ours.size() + ")", COLOR_COMPLETED));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : ours) {
+                String name = tile.getTerritoryName() != null ? tile.getTerritoryName() : tile.getName();
+                String suffix = tile.getDefenseLevel() > 0 ? " [+" + tile.getDefenseLevel() + " def]" : "";
                 tilesPanel.add(createTileRow(tile, true, null));
             }
             tilesPanel.add(Box.createVerticalStrut(8));
         }
 
+        // Locked enemy territories
+        List<BoardTile> locked = tiles.stream()
+            .filter(t -> !t.isOurs() && !t.isAttackable())
+            .collect(Collectors.toList());
+        if (!locked.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\uD83D\uDD12 Out of Reach (" + locked.size() + ")", COLOR_LOCKED));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : locked) {
+                tilesPanel.add(createTileRow(tile, false, null));
+            }
+        }
+    }
+
+    private void renderBattleshipList(List<BoardTile> tiles) {
+        // Hits
+        List<BoardTile> hits = tiles.stream()
+            .filter(t -> "hit".equals(t.getAttackResult()))
+            .collect(Collectors.toList());
+        if (!hits.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2716 Hits (" + hits.size() + ")", COLOR_HIT));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : hits) {
+                tilesPanel.add(createTileRow(tile, true, "\u2716 "));
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        // Remaining (not yet attacked)
         List<BoardTile> remaining = tiles.stream()
-            .filter(t -> !t.isCompleted() && !t.isCurrent() && t.getSpecial() == null)
+            .filter(t -> t.getAttackResult() == null)
             .collect(Collectors.toList());
         if (!remaining.isEmpty()) {
             tilesPanel.add(createSectionHeader("\u25CB Remaining (" + remaining.size() + ")", COLOR_INCOMPLETE));

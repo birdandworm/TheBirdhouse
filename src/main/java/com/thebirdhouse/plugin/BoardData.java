@@ -2,11 +2,8 @@ package com.thebirdhouse.plugin;
 
 import lombok.Data;
 import java.util.List;
+import java.util.Map;
 
-/**
- * Board data fetched from The Birdhouse API.
- * Contains tile info for drop matching and panel display.
- */
 @Data
 public class BoardData {
     private String roomCode;
@@ -14,6 +11,53 @@ public class BoardData {
     private List<BoardTile> tiles;
     private int rows;
     private int cols;
-    private Integer position; // Player's current position (tile race)
-    private Long deadline; // Event end timestamp in ms (null if no deadline)
+    private Integer position;
+    private Long deadline;
+
+    // Tile Race: opponent positions
+    private List<OpponentPosition> opponents;
+
+    // Territory War: ownership and adjacency info
+    private TerritoryMeta territoryMeta;
+
+    // Battleship: attack/defense data
+    private BattleshipMeta battleshipMeta;
+
+    @Data
+    public static class OpponentPosition {
+        private String name;
+        private int position;
+    }
+
+    @Data
+    public static class TerritoryMeta {
+        private Map<String, List<String>> connections;
+        private Map<String, TerritoryOwner> owners;
+        private Map<String, String> ownerNames;
+    }
+
+    @Data
+    public static class TerritoryOwner {
+        private String owner;
+        private boolean ours;
+        private int defense;
+        private boolean attackable;
+    }
+
+    @Data
+    public static class BattleshipMeta {
+        private Map<String, String> defenseGrid;
+        private List<BattleshipShip> ourShips;
+        private List<BattleshipShip> sunkEnemyShips;
+        private String turn;
+        private String myTeam;
+        private String enemyTeam;
+    }
+
+    @Data
+    public static class BattleshipShip {
+        private String name;
+        private List<int[]> cells;
+        private boolean sunk;
+    }
 }

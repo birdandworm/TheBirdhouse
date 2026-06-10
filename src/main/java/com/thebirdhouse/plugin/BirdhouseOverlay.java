@@ -95,6 +95,14 @@ public class BirdhouseOverlay extends OverlayPanel {
             }
         }
 
+        // Current date/time for screenshot verification
+        String now = new java.text.SimpleDateFormat("MM/dd/yy h:mm a").format(new java.util.Date());
+        panelComponent.getChildren().add(LineComponent.builder()
+            .left("Time:")
+            .right(now)
+            .rightColor(new Color(180, 180, 180))
+            .build());
+
         // Show last match for 30 seconds
         if (lastMatchInfo != null && System.currentTimeMillis() - lastMatchTime < 30000) {
             panelComponent.getChildren().add(LineComponent.builder()
