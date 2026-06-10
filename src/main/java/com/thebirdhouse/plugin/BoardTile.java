@@ -1,12 +1,14 @@
 package com.thebirdhouse.plugin;
 
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class BoardTile {
     private String key;
     private String name;
     private String matchName;
+    private List<String> matchItems;
     private String gameType;
     private boolean completed;
     private boolean current;

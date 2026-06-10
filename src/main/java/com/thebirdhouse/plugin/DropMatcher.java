@@ -111,6 +111,18 @@ public class DropMatcher {
     }
 
     private boolean matchesTile(BoardTile tile, String npcName, String itemName) {
+        // Check matchItems list first (generic tiles / presets)
+        List<String> matchItems = tile.getMatchItems();
+        if (matchItems != null && !matchItems.isEmpty()) {
+            String item = itemName.toLowerCase();
+            for (String acceptable : matchItems) {
+                if (acceptable != null && acceptable.toLowerCase().equals(item)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         String matchTarget = tile.getMatchName();
         if (matchTarget == null || matchTarget.isEmpty()) {
             return false;
