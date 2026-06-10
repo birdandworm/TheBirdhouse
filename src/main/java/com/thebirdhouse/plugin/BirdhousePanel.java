@@ -9,12 +9,12 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * RuneLite sidebar panel showing a mini board visual at the top
- * and a detailed tile list below, adapting to each game mode.
- */
 @Slf4j
 public class BirdhousePanel extends PluginPanel {
 
@@ -26,6 +26,9 @@ public class BirdhousePanel extends PluginPanel {
     private static final Color COLOR_FREE = new Color(93, 164, 196);
     private static final Color COLOR_BRAND = new Color(93, 164, 196);
 
+    private static final int PANEL_WIDTH = 225;
+    private static final int AUTO_REFRESH_SECONDS = 60;
+
     private final BirdhouseConfig config;
     private final DropMatcher dropMatcher;
     private final BirdhouseApiClient apiClient;
@@ -35,7 +38,13 @@ public class BirdhousePanel extends PluginPanel {
     private final JPanel tilesPanel;
     private final JLabel statusLabel;
     private final JLabel progressLabel;
+    private final JLabel countdownLabel;
     private final JButton refreshButton;
+
+    private ScheduledExecutorService scheduler;
+    private ScheduledFuture<?> autoRefreshTask;
+    private ScheduledFuture<?> countdownTask;
+    private Long currentDeadline;
 
     @Inject
     public BirdhousePanel(BirdhouseConfig config, DropMatcher dropMatcher, BirdhouseApiClient apiClient) {
@@ -64,19 +73,28 @@ public class BirdhousePanel extends PluginPanel {
         headerPanel.add(refreshButton, BorderLayout.EAST);
 
         // Status
-        JPanel statusPanel = new JPanel(new GridLayout(2, 1, 0, 4));
+        JPanel statusPanel = new JPanel();
+        statusPanel.setLayout(new BoxLayout(statusPanel, BoxLayout.Y_AXIS));
         statusPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         statusPanel.setBorder(new EmptyBorder(8, 0, 8, 0));
 
         statusLabel = new JLabel("Not connected");
         statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         statusLabel.setFont(statusLabel.getFont().deriveFont(12f));
+        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         statusPanel.add(statusLabel);
 
         progressLabel = new JLabel("");
         progressLabel.setForeground(new Color(150, 200, 100));
         progressLabel.setFont(progressLabel.getFont().deriveFont(Font.BOLD, 13f));
+        progressLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         statusPanel.add(progressLabel);
+
+        countdownLabel = new JLabel("");
+        countdownLabel.setForeground(new Color(255, 180, 80));
+        countdownLabel.setFont(countdownLabel.getFont().deriveFont(11f));
+        countdownLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        statusPanel.add(countdownLabel);
 
         // Mini board area
         boardPanel = new JPanel();
@@ -95,21 +113,51 @@ public class BirdhousePanel extends PluginPanel {
         scrollPane.setBorder(null);
         scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-        // Main content panel
-        mainPanel = new JPanel();
-        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+        // Main content panel with proper layout
+        mainPanel = new JPanel(new BorderLayout());
         mainPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        mainPanel.add(boardPanel);
-        mainPanel.add(scrollPane);
+        mainPanel.add(boardPanel, BorderLayout.NORTH);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
 
         // Top section
-        JPanel topSection = new JPanel(new BorderLayout());
+        JPanel topSection = new JPanel();
+        topSection.setLayout(new BoxLayout(topSection, BoxLayout.Y_AXIS));
         topSection.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        topSection.add(headerPanel, BorderLayout.NORTH);
-        topSection.add(statusPanel, BorderLayout.SOUTH);
+        topSection.add(headerPanel);
+        topSection.add(statusPanel);
 
         add(topSection, BorderLayout.NORTH);
         add(mainPanel, BorderLayout.CENTER);
+    }
+
+    public void startAutoRefresh() {
+        if (scheduler == null || scheduler.isShutdown()) {
+            scheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+        stopAutoRefresh();
+        autoRefreshTask = scheduler.scheduleAtFixedRate(
+            () -> SwingUtilities.invokeLater(this::refreshBoard),
+            AUTO_REFRESH_SECONDS, AUTO_REFRESH_SECONDS, TimeUnit.SECONDS
+        );
+    }
+
+    public void stopAutoRefresh() {
+        if (autoRefreshTask != null) {
+            autoRefreshTask.cancel(false);
+            autoRefreshTask = null;
+        }
+        if (countdownTask != null) {
+            countdownTask.cancel(false);
+            countdownTask = null;
+        }
+    }
+
+    public void shutdown() {
+        stopAutoRefresh();
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+            scheduler = null;
+        }
     }
 
     public void refreshBoard() {
@@ -117,6 +165,7 @@ public class BirdhousePanel extends PluginPanel {
         if (roomCode == null || roomCode.isEmpty()) {
             statusLabel.setText("No room code set");
             progressLabel.setText("");
+            countdownLabel.setText("");
             boardPanel.removeAll();
             tilesPanel.removeAll();
             boardPanel.revalidate();
@@ -133,8 +182,10 @@ public class BirdhousePanel extends PluginPanel {
                 if (board == null) {
                     statusLabel.setText("Failed to load board");
                     progressLabel.setText("");
+                    countdownLabel.setText("");
                     return;
                 }
+                dropMatcher.updateBoard(board);
                 updatePanel(board, roomCode);
             });
         });
@@ -145,6 +196,7 @@ public class BirdhousePanel extends PluginPanel {
         if (tiles == null || tiles.isEmpty()) {
             statusLabel.setText("Room: " + roomCode + " (no tiles)");
             progressLabel.setText("");
+            countdownLabel.setText("");
             boardPanel.removeAll();
             tilesPanel.removeAll();
             boardPanel.revalidate();
@@ -160,6 +212,11 @@ public class BirdhousePanel extends PluginPanel {
         statusLabel.setText("Room: " + roomCode + " \u2022 " + formatGameType(gameType));
         progressLabel.setText(completed + " / " + total + " complete (" + remaining + " remaining)");
 
+        // Countdown
+        currentDeadline = board.getDeadline();
+        updateCountdown();
+        startCountdownTimer();
+
         // Render mini board
         boardPanel.removeAll();
         boardPanel.add(renderMiniBoard(board), BorderLayout.CENTER);
@@ -171,6 +228,48 @@ public class BirdhousePanel extends PluginPanel {
         renderTileList(board);
         tilesPanel.revalidate();
         tilesPanel.repaint();
+    }
+
+    private void startCountdownTimer() {
+        if (countdownTask != null) {
+            countdownTask.cancel(false);
+        }
+        if (currentDeadline == null) return;
+        if (scheduler == null || scheduler.isShutdown()) {
+            scheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+        countdownTask = scheduler.scheduleAtFixedRate(
+            () -> SwingUtilities.invokeLater(this::updateCountdown),
+            1, 1, TimeUnit.SECONDS
+        );
+    }
+
+    private void updateCountdown() {
+        if (currentDeadline == null) {
+            countdownLabel.setText("");
+            return;
+        }
+        long remaining = currentDeadline - System.currentTimeMillis();
+        if (remaining <= 0) {
+            countdownLabel.setText("\u23F0 Event ended!");
+            countdownLabel.setForeground(new Color(255, 100, 100));
+            return;
+        }
+        long days = remaining / (1000 * 60 * 60 * 24);
+        long hours = (remaining / (1000 * 60 * 60)) % 24;
+        long mins = (remaining / (1000 * 60)) % 60;
+        long secs = (remaining / 1000) % 60;
+
+        String timeStr;
+        if (days > 0) {
+            timeStr = String.format("%dd %dh %dm %ds", days, hours, mins, secs);
+        } else if (hours > 0) {
+            timeStr = String.format("%dh %dm %ds", hours, mins, secs);
+        } else {
+            timeStr = String.format("%dm %ds", mins, secs);
+        }
+        countdownLabel.setText("\u23F0 " + timeStr + " remaining");
+        countdownLabel.setForeground(remaining < 3600000 ? new Color(255, 100, 100) : new Color(255, 180, 80));
     }
 
     // ===== MINI BOARD RENDERERS =====
@@ -194,12 +293,21 @@ public class BirdhousePanel extends PluginPanel {
         }
     }
 
+    private int calculateCellSize(int cols, int rows) {
+        int availableWidth = PANEL_WIDTH - 28; // padding + border
+        int cellWithGap = availableWidth / cols;
+        int size = Math.max(8, cellWithGap - 2); // subtract gap, min 8px
+        return Math.min(size, 18); // max 18px
+    }
+
     private JPanel renderGridBoard(BoardData board) {
         int rows = board.getRows();
         int cols = board.getCols();
         if (rows == 0 || cols == 0) return new JPanel();
 
-        JPanel grid = new JPanel(new GridLayout(rows, cols, 2, 2));
+        int cellSize = calculateCellSize(cols, rows);
+
+        JPanel grid = new JPanel(new GridLayout(rows, cols, 1, 1));
         grid.setBackground(ColorScheme.DARK_GRAY_COLOR);
         grid.setBorder(new EmptyBorder(4, 4, 4, 4));
 
@@ -209,7 +317,7 @@ public class BirdhousePanel extends PluginPanel {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 JPanel cell = new JPanel();
-                cell.setPreferredSize(new Dimension(18, 18));
+                cell.setPreferredSize(new Dimension(cellSize, cellSize));
 
                 if (tileIdx < tiles.size()) {
                     BoardTile tile = tiles.get(tileIdx);
@@ -235,7 +343,7 @@ public class BirdhousePanel extends PluginPanel {
             }
         }
 
-        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
         wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
         wrapper.add(grid);
         return wrapper;
@@ -246,7 +354,9 @@ public class BirdhousePanel extends PluginPanel {
         int cols = board.getCols();
         if (rows == 0 || cols == 0) return new JPanel();
 
-        JPanel grid = new JPanel(new GridLayout(rows, cols, 2, 2));
+        int cellSize = calculateCellSize(cols, rows);
+
+        JPanel grid = new JPanel(new GridLayout(rows, cols, 1, 1));
         grid.setBackground(ColorScheme.DARK_GRAY_COLOR);
         grid.setBorder(new EmptyBorder(4, 4, 4, 4));
 
@@ -256,7 +366,7 @@ public class BirdhousePanel extends PluginPanel {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 JPanel cell = new JPanel();
-                cell.setPreferredSize(new Dimension(18, 18));
+                cell.setPreferredSize(new Dimension(cellSize, cellSize));
 
                 if (tileIdx < tiles.size()) {
                     BoardTile tile = tiles.get(tileIdx);
@@ -282,7 +392,7 @@ public class BirdhousePanel extends PluginPanel {
             }
         }
 
-        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
         wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
         wrapper.add(grid);
         return wrapper;
@@ -290,16 +400,17 @@ public class BirdhousePanel extends PluginPanel {
 
     private JPanel renderTileRaceBoard(BoardData board) {
         List<BoardTile> tiles = board.getTiles();
-        int tilesPerRow = 10;
+        int tilesPerRow = Math.min(12, tiles.size());
         int totalRows = (int) Math.ceil(tiles.size() / (double) tilesPerRow);
+        int cellSize = calculateCellSize(tilesPerRow, totalRows);
 
-        JPanel track = new JPanel(new GridLayout(totalRows, tilesPerRow, 2, 2));
+        JPanel track = new JPanel(new GridLayout(totalRows, tilesPerRow, 1, 1));
         track.setBackground(ColorScheme.DARK_GRAY_COLOR);
         track.setBorder(new EmptyBorder(4, 4, 4, 4));
 
         for (int i = 0; i < totalRows * tilesPerRow; i++) {
             JPanel cell = new JPanel();
-            cell.setPreferredSize(new Dimension(16, 16));
+            cell.setPreferredSize(new Dimension(cellSize, cellSize));
 
             if (i < tiles.size()) {
                 BoardTile tile = tiles.get(i);
@@ -331,7 +442,7 @@ public class BirdhousePanel extends PluginPanel {
             track.add(cell);
         }
 
-        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
         wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
         wrapper.add(track);
         return wrapper;
@@ -345,7 +456,6 @@ public class BirdhousePanel extends PluginPanel {
         panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         panel.setBorder(new EmptyBorder(4, 4, 4, 4));
 
-        // Group by region
         java.util.Map<String, List<BoardTile>> byRegion = tiles.stream()
             .collect(Collectors.groupingBy(t -> t.getRegion() != null ? t.getRegion() : "Unknown"));
 
@@ -377,14 +487,15 @@ public class BirdhousePanel extends PluginPanel {
         List<BoardTile> tiles = board.getTiles();
         int tilesPerRow = 8;
         int totalRows = (int) Math.ceil(tiles.size() / (double) tilesPerRow);
+        int cellSize = calculateCellSize(tilesPerRow, totalRows);
 
-        JPanel track = new JPanel(new GridLayout(totalRows, tilesPerRow, 2, 2));
+        JPanel track = new JPanel(new GridLayout(totalRows, tilesPerRow, 1, 1));
         track.setBackground(ColorScheme.DARK_GRAY_COLOR);
         track.setBorder(new EmptyBorder(4, 4, 4, 4));
 
         for (int i = 0; i < totalRows * tilesPerRow; i++) {
             JPanel cell = new JPanel();
-            cell.setPreferredSize(new Dimension(18, 18));
+            cell.setPreferredSize(new Dimension(cellSize, cellSize));
 
             if (i < tiles.size()) {
                 BoardTile tile = tiles.get(i);
@@ -397,7 +508,7 @@ public class BirdhousePanel extends PluginPanel {
             track.add(cell);
         }
 
-        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
         wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
         wrapper.add(track);
         return wrapper;
@@ -419,7 +530,6 @@ public class BirdhousePanel extends PluginPanel {
     }
 
     private void renderTileRaceList(List<BoardTile> tiles) {
-        // Current tile
         List<BoardTile> current = tiles.stream()
             .filter(t -> t.isCurrent() && t.getSpecial() == null && !t.isCompleted())
             .collect(Collectors.toList());
@@ -432,7 +542,6 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.add(Box.createVerticalStrut(8));
         }
 
-        // Completed
         List<BoardTile> completed = tiles.stream()
             .filter(t -> t.isCompleted() && t.getSpecial() == null)
             .collect(Collectors.toList());
@@ -445,7 +554,6 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.add(Box.createVerticalStrut(8));
         }
 
-        // Remaining
         List<BoardTile> remaining = tiles.stream()
             .filter(t -> !t.isCompleted() && !t.isCurrent() && t.getSpecial() == null)
             .collect(Collectors.toList());
@@ -459,7 +567,6 @@ public class BirdhousePanel extends PluginPanel {
     }
 
     private void renderChipDropList(List<BoardTile> tiles) {
-        // Available (unlocked)
         List<BoardTile> available = tiles.stream()
             .filter(t -> t.isAvailable() && !t.isCompleted())
             .collect(Collectors.toList());
@@ -472,7 +579,6 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.add(Box.createVerticalStrut(8));
         }
 
-        // Completed (claimed)
         List<BoardTile> completed = tiles.stream()
             .filter(BoardTile::isCompleted)
             .collect(Collectors.toList());
@@ -485,7 +591,6 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.add(Box.createVerticalStrut(8));
         }
 
-        // Locked
         List<BoardTile> locked = tiles.stream()
             .filter(t -> !t.isAvailable() && !t.isCompleted())
             .collect(Collectors.toList());

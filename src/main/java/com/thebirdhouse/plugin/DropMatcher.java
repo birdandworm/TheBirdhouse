@@ -47,6 +47,12 @@ public class DropMatcher {
         return activeBoard;
     }
 
+    public void updateBoard(BoardData board) {
+        if (board != null) {
+            this.activeBoard = board;
+        }
+    }
+
     public void loadActiveBoard(String roomCode) {
         if (roomCode == null || roomCode.isEmpty()) {
             return;

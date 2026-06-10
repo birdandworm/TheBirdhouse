@@ -62,15 +62,13 @@ public class BirdhousePlugin extends Plugin {
         log.info("The Birdhouse plugin started");
         apiClient.setAuthToken(config.authToken());
 
-        // Register overlay
         overlayManager.add(birdhouseOverlay);
 
-        // Register sidebar panel
         BufferedImage icon;
         try {
             icon = ImageUtil.loadImageResource(getClass(), "/panel_icon.png");
         } catch (Exception e) {
-            icon = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+            icon = createFallbackIcon();
         }
         navButton = NavigationButton.builder()
             .tooltip("The Birdhouse")
@@ -80,11 +78,12 @@ public class BirdhousePlugin extends Plugin {
             .build();
         clientToolbar.addNavigation(navButton);
 
+        birdhousePanel.startAutoRefresh();
+
         if (config.trackActivity() && client.getGameState() == GameState.LOGGED_IN) {
             sessionTracker.startSession(client.getLocalPlayer().getName());
         }
 
-        // Load board on startup if already logged in
         if (client.getGameState() == GameState.LOGGED_IN) {
             loadBoard();
         }
@@ -95,6 +94,8 @@ public class BirdhousePlugin extends Plugin {
         log.info("The Birdhouse plugin stopped");
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
+        birdhousePanel.stopAutoRefresh();
+        birdhousePanel.shutdown();
         sessionTracker.endSession();
     }
 
@@ -117,7 +118,6 @@ public class BirdhousePlugin extends Plugin {
     private void loadBoard() {
         String roomCode = config.roomCode();
         if (roomCode == null || roomCode.isEmpty()) {
-            // Try auto-detecting from active rooms
             apiClient.fetchActiveRooms().thenAccept(rooms -> {
                 if (rooms != null && !rooms.isEmpty()) {
                     String autoCode = rooms.get(0).getCode();
@@ -139,6 +139,19 @@ public class BirdhousePlugin extends Plugin {
                 }
             });
         }
+    }
+
+    private BufferedImage createFallbackIcon() {
+        BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = img.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(new java.awt.Color(93, 164, 196));
+        g.fillRoundRect(1, 1, 14, 14, 4, 4);
+        g.setColor(java.awt.Color.WHITE);
+        g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 11));
+        g.drawString("B", 4, 13);
+        g.dispose();
+        return img;
     }
 
     @Provides

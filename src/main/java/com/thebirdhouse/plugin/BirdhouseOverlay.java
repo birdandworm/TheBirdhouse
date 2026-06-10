@@ -9,24 +9,18 @@ import net.runelite.client.ui.overlay.components.TitleComponent;
 import javax.inject.Inject;
 import java.awt.*;
 
-/**
- * Small overlay that shows tile progress and recent match info
- * in the top-left corner of the game screen.
- */
 public class BirdhouseOverlay extends OverlayPanel {
 
     private final BirdhouseConfig config;
     private final DropMatcher dropMatcher;
-    private final AchievementTracker achievementTracker;
 
     private String lastMatchInfo = null;
     private long lastMatchTime = 0;
 
     @Inject
-    public BirdhouseOverlay(BirdhouseConfig config, DropMatcher dropMatcher, AchievementTracker achievementTracker) {
+    public BirdhouseOverlay(BirdhouseConfig config, DropMatcher dropMatcher) {
         this.config = config;
         this.dropMatcher = dropMatcher;
-        this.achievementTracker = achievementTracker;
 
         setPosition(OverlayPosition.TOP_LEFT);
         setPriority(OverlayPriority.LOW);
@@ -82,6 +76,25 @@ public class BirdhouseOverlay extends OverlayPanel {
                 .build());
         }
 
+        // Countdown
+        Long deadline = board.getDeadline();
+        if (deadline != null) {
+            long timeLeft = deadline - System.currentTimeMillis();
+            if (timeLeft > 0) {
+                panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Ends in:")
+                    .right(formatCountdown(timeLeft))
+                    .rightColor(timeLeft < 3600000 ? new Color(255, 100, 100) : new Color(255, 180, 80))
+                    .build());
+            } else {
+                panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Status:")
+                    .right("Ended")
+                    .rightColor(new Color(255, 100, 100))
+                    .build());
+            }
+        }
+
         // Show last match for 30 seconds
         if (lastMatchInfo != null && System.currentTimeMillis() - lastMatchTime < 30000) {
             panelComponent.getChildren().add(LineComponent.builder()
@@ -96,5 +109,17 @@ public class BirdhouseOverlay extends OverlayPanel {
         }
 
         return super.render(graphics);
+    }
+
+    private String formatCountdown(long millis) {
+        long days = millis / (1000 * 60 * 60 * 24);
+        long hours = (millis / (1000 * 60 * 60)) % 24;
+        long mins = (millis / (1000 * 60)) % 60;
+        if (days > 0) {
+            return String.format("%dd %dh %dm", days, hours, mins);
+        } else if (hours > 0) {
+            return String.format("%dh %dm", hours, mins);
+        }
+        return String.format("%dm", mins);
     }
 }

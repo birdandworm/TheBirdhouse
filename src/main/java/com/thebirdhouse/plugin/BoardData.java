@@ -15,4 +15,5 @@ public class BoardData {
     private int rows;
     private int cols;
     private Integer position; // Player's current position (tile race)
+    private Long deadline; // Event end timestamp in ms (null if no deadline)
 }

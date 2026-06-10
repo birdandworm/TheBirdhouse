@@ -1,20 +1,17 @@
 package com.thebirdhouse.plugin;
 
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.client.ui.DrawManager;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
 
-/**
- * Captures screenshots from the game client for proof submissions.
- */
 @Slf4j
 @Singleton
 public class ScreenshotHelper {
@@ -22,30 +19,40 @@ public class ScreenshotHelper {
     @Inject
     private DrawManager drawManager;
 
-    /**
-     * Capture the current game frame as JPEG bytes.
-     * Returns null if capture fails.
-     */
     public byte[] capture() {
         try {
-            final BufferedImage[] imageHolder = new BufferedImage[1];
+            final Image[] imageHolder = new Image[1];
             final CountDownLatch latch = new CountDownLatch(1);
 
             drawManager.requestNextFrameListener(image -> {
-                imageHolder[0] = (BufferedImage) image;
+                imageHolder[0] = image;
                 latch.countDown();
             });
 
-            if (!latch.await(2, TimeUnit.SECONDS)) {
+            if (!latch.await(3, TimeUnit.SECONDS)) {
                 log.warn("Screenshot capture timed out");
                 return null;
             }
 
-            if (imageHolder[0] == null) return null;
+            Image raw = imageHolder[0];
+            if (raw == null) return null;
+
+            BufferedImage buffered;
+            if (raw instanceof BufferedImage) {
+                buffered = (BufferedImage) raw;
+            } else {
+                buffered = new BufferedImage(
+                    raw.getWidth(null), raw.getHeight(null), BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = buffered.createGraphics();
+                g.drawImage(raw, 0, 0, null);
+                g.dispose();
+            }
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(imageHolder[0], "jpg", baos);
-            return baos.toByteArray();
+            ImageIO.write(buffered, "jpg", baos);
+            byte[] bytes = baos.toByteArray();
+            log.debug("Screenshot captured: {} bytes", bytes.length);
+            return bytes;
         } catch (Exception e) {
             log.error("Failed to capture screenshot", e);
             return null;
