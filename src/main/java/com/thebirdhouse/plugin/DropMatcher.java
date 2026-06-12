@@ -50,38 +50,60 @@ public class DropMatcher {
     public void updateBoard(BoardData board) {
         if (board != null) {
             this.activeBoard = board;
+            log.info("[Birdhouse] Board updated: {} tiles, gameType={}", board.getTiles() != null ? board.getTiles().size() : 0, board.getGameType());
         }
     }
 
     public void loadActiveBoard(String roomCode) {
         if (roomCode == null || roomCode.isEmpty()) {
+            log.warn("[Birdhouse] loadActiveBoard called with empty roomCode");
             return;
         }
         this.activeRoomCode = roomCode;
+        log.info("[Birdhouse] Loading board for room: {}", roomCode);
         apiClient.fetchBoard(roomCode).thenAccept(board -> {
             if (board != null) {
                 this.activeBoard = board;
-                log.info("Loaded board for room {}: {} tiles", roomCode, board.getTiles().size());
+                log.info("[Birdhouse] Board loaded for room {}: {} tiles, gameType={}", roomCode, board.getTiles().size(), board.getGameType());
+                if (board.getTiles().size() > 0) {
+                    BoardTile first = board.getTiles().get(0);
+                    log.info("[Birdhouse]   First tile: name='{}', matchName='{}', matchItems={}", first.getName(), first.getMatchName(), first.getMatchItems());
+                }
+            } else {
+                log.warn("[Birdhouse] Board fetch returned null for room {}", roomCode);
             }
         });
     }
 
     @Subscribe
     public void onServerNpcLoot(ServerNpcLoot event) {
-        if (!config.autoSubmitDrops() || activeBoard == null) {
+        if (!config.autoSubmitDrops()) {
+            log.info("[Birdhouse] Auto-submit disabled in config, skipping loot event");
+            return;
+        }
+        if (activeBoard == null) {
+            log.info("[Birdhouse] No active board loaded, skipping loot event");
             return;
         }
 
         NPCComposition npcComp = event.getComposition();
         String npcName = npcComp != null ? npcComp.getName() : "Unknown";
 
+        log.info("[Birdhouse] Loot received from '{}': {} items", npcName, event.getItems().size());
+
         for (ItemStack itemStack : event.getItems()) {
             ItemComposition itemComp = itemManager.getItemComposition(itemStack.getId());
             String itemName = itemComp.getName();
             int quantity = itemStack.getQuantity();
 
+            log.info("[Birdhouse]   Item: '{}' x{}", itemName, quantity);
+
             List<TileMatch> matches = findMatches(npcName, itemName, quantity);
+            if (matches.isEmpty()) {
+                log.info("[Birdhouse]   No tile match for '{}'", itemName);
+            }
             for (TileMatch match : matches) {
+                log.info("[Birdhouse]   MATCH! tile='{}' key={}", match.getTileName(), match.getTileKey());
                 submitMatch(match, npcName, itemName, quantity);
             }
         }
@@ -117,6 +139,7 @@ public class DropMatcher {
             String item = itemName.toLowerCase();
             for (String acceptable : matchItems) {
                 if (acceptable != null && acceptable.toLowerCase().equals(item)) {
+                    log.debug("[Birdhouse]     matchItems hit: '{}' in list for tile '{}'", itemName, tile.getName());
                     return true;
                 }
             }
@@ -173,17 +196,21 @@ public class DropMatcher {
     }
 
     private void doSubmit(ProofPayload payload, byte[] screenshot, TileMatch match, String itemName) {
+        log.info("[Birdhouse] Submitting proof: tile='{}', item='{}', screenshot={} bytes", match.getTileName(), itemName, screenshot != null ? screenshot.length : 0);
         apiClient.submitProof(payload, screenshot).thenAccept(success -> {
-            if (success && config.notifyOnSubmit()) {
-                client.addChatMessage(
-                    net.runelite.api.ChatMessageType.GAMEMESSAGE,
-                    "",
-                    "[Birdhouse] Proof submitted: " + match.getTileName() + " (" + itemName + ")",
-                    ""
-                );
-            }
             if (success) {
+                log.info("[Birdhouse] Proof submitted successfully for '{}'", match.getTileName());
+                if (config.notifyOnSubmit()) {
+                    client.addChatMessage(
+                        net.runelite.api.ChatMessageType.GAMEMESSAGE,
+                        "",
+                        "[Birdhouse] Proof submitted: " + match.getTileName() + " (" + itemName + ")",
+                        ""
+                    );
+                }
                 overlay.setLastMatch(match.getTileName(), itemName);
+            } else {
+                log.warn("[Birdhouse] Proof submission FAILED for '{}'", match.getTileName());
             }
         });
     }
