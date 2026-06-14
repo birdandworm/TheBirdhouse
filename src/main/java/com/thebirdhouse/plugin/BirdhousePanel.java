@@ -160,10 +160,32 @@ public class BirdhousePanel extends PluginPanel {
         }
     }
 
+    private String activeRoomCode;
+
+    public void setActiveRoomCode(String code) {
+        this.activeRoomCode = code;
+    }
+
     public void refreshBoard() {
         String roomCode = config.roomCode();
+        if (roomCode != null) {
+            roomCode = roomCode.trim();
+        }
+
+        // Fall back to auto-detected room if no manual code
+        if ((roomCode == null || roomCode.isEmpty()) && activeRoomCode != null && !activeRoomCode.isEmpty()) {
+            roomCode = activeRoomCode;
+        }
+
         if (roomCode == null || roomCode.isEmpty()) {
-            statusLabel.setText("No room code set");
+            String token = config.authToken();
+            if (token == null || token.trim().isEmpty()) {
+                statusLabel.setText("\u26A0 No auth token configured");
+                statusLabel.setForeground(new Color(255, 120, 120));
+            } else {
+                statusLabel.setText("\u26A0 No active room found");
+                statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+            }
             progressLabel.setText("");
             countdownLabel.setText("");
             boardPanel.removeAll();
@@ -173,10 +195,12 @@ public class BirdhousePanel extends PluginPanel {
             return;
         }
 
+        final String fetchCode = roomCode;
         statusLabel.setText("Loading...");
+        statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         refreshButton.setEnabled(false);
 
-        apiClient.fetchBoard(roomCode).thenAccept(board -> {
+        apiClient.fetchBoard(fetchCode).thenAccept(board -> {
             SwingUtilities.invokeLater(() -> {
                 refreshButton.setEnabled(true);
                 if (board == null) {

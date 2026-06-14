@@ -186,9 +186,13 @@ public class DropMatcher {
 
         if (config.includeScreenshot()) {
             screenshotHelper.captureAsync(screenshot -> {
+                if (screenshot == null || screenshot.length == 0) {
+                    log.warn("[Birdhouse] Screenshot capture returned null/empty for '{}' - submitting without image", match.getTileName());
+                }
                 doSubmit(payload, screenshot, match, itemName);
             });
         } else {
+            log.info("[Birdhouse] Screenshots disabled in config, submitting without image");
             doSubmit(payload, null, match, itemName);
         }
 

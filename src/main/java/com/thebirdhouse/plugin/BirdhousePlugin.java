@@ -7,6 +7,7 @@ import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -60,7 +61,14 @@ public class BirdhousePlugin extends Plugin {
     @Override
     protected void startUp() {
         log.info("The Birdhouse plugin started");
-        apiClient.setAuthToken(config.authToken());
+        String token = config.authToken();
+        if (token != null) {
+            token = token.trim();
+        }
+        log.info("[Birdhouse] Auth token configured: {} (length={})",
+            token != null && !token.isEmpty() ? token.substring(0, Math.min(8, token.length())) + "..." : "(empty)",
+            token != null ? token.length() : 0);
+        apiClient.setAuthToken(token);
 
         overlayManager.add(birdhouseOverlay);
 
@@ -103,7 +111,12 @@ public class BirdhousePlugin extends Plugin {
     public void onGameStateChanged(GameStateChanged event) {
         if (event.getGameState() == GameState.LOGGED_IN) {
             String playerName = client.getLocalPlayer().getName();
-            apiClient.setAuthToken(config.authToken());
+            String token = config.authToken();
+            if (token != null) {
+                token = token.trim();
+            }
+            apiClient.setAuthToken(token);
+            log.info("[Birdhouse] Login detected for '{}', token present: {}", playerName, token != null && !token.isEmpty());
 
             loadBoard();
 
@@ -115,12 +128,39 @@ public class BirdhousePlugin extends Plugin {
         }
     }
 
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event) {
+        if (!"birdhouse".equals(event.getGroup())) {
+            return;
+        }
+
+        if ("authToken".equals(event.getKey()) || "roomCode".equals(event.getKey())) {
+            String token = config.authToken();
+            if (token != null) {
+                token = token.trim();
+            }
+            apiClient.setAuthToken(token);
+            log.info("[Birdhouse] Config changed ({}), token present: {}", event.getKey(), token != null && !token.isEmpty());
+
+            if (client.getGameState() == GameState.LOGGED_IN) {
+                loadBoard();
+            }
+        }
+    }
+
     private void loadBoard() {
         String roomCode = config.roomCode();
+        if (roomCode != null) {
+            roomCode = roomCode.trim();
+        }
+
         if (roomCode == null || roomCode.isEmpty()) {
+            log.info("[Birdhouse] No manual room code set, attempting auto-detect via active-rooms...");
             apiClient.fetchActiveRooms().thenAccept(rooms -> {
                 if (rooms != null && !rooms.isEmpty()) {
                     String autoCode = rooms.get(0).getCode();
+                    log.info("[Birdhouse] Auto-detected room: {} (from {} active rooms)", autoCode, rooms.size());
+                    birdhousePanel.setActiveRoomCode(autoCode);
                     dropMatcher.loadActiveBoard(autoCode);
                     apiClient.fetchBoard(autoCode).thenAccept(board -> {
                         if (board != null) {
@@ -128,9 +168,14 @@ public class BirdhousePlugin extends Plugin {
                             birdhousePanel.refreshBoard();
                         }
                     });
+                } else {
+                    log.warn("[Birdhouse] No active rooms found. Check: 1) Auth token is set correctly 2) You've joined a room on the website");
+                    birdhousePanel.refreshBoard();
                 }
             });
         } else {
+            log.info("[Birdhouse] Using manual room code: {}", roomCode);
+            birdhousePanel.setActiveRoomCode(roomCode);
             dropMatcher.loadActiveBoard(roomCode);
             apiClient.fetchBoard(roomCode).thenAccept(board -> {
                 if (board != null) {

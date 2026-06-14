@@ -125,6 +125,10 @@ public class BirdhouseApiClient {
      */
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
         return CompletableFuture.supplyAsync(() -> {
+            if (authToken == null || authToken.isEmpty()) {
+                log.warn("[Birdhouse] Cannot fetch active rooms — no auth token configured");
+                return java.util.Collections.<ActiveRoom>emptyList();
+            }
             try {
                 Request request = new Request.Builder()
                     .url(BASE_URL + "/active-rooms")
@@ -138,12 +142,16 @@ public class BirdhouseApiClient {
                         JsonObject obj = gson.fromJson(body, JsonObject.class);
                         if (obj.has("rooms")) {
                             ActiveRoom[] rooms = gson.fromJson(obj.get("rooms"), ActiveRoom[].class);
+                            log.info("[Birdhouse] Active rooms response: {} rooms found", rooms.length);
                             return java.util.Arrays.asList(rooms);
                         }
+                    } else {
+                        String errBody = response.body() != null ? response.body().string() : "(no body)";
+                        log.warn("[Birdhouse] Active rooms request failed: {} {} - {}", response.code(), response.message(), errBody);
                     }
                 }
             } catch (IOException e) {
-                log.error("Failed to fetch active rooms", e);
+                log.error("[Birdhouse] Failed to fetch active rooms", e);
             }
             return java.util.Collections.emptyList();
         });
