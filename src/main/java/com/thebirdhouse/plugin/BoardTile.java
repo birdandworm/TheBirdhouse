@@ -18,6 +18,7 @@ public class BoardTile {
     private String special;
     private String region;
     private int quantity;
+    private int currentQty;
 
     // Territory War extras
     private String territoryName;
@@ -26,5 +27,5 @@ public class BoardTile {
     private int defenseLevel;
 
     // Battleship extras
-    private String attackResult; // "hit", "miss", or null
+    private String attackResult; // "hit", "miss", "sunk", or null
 }

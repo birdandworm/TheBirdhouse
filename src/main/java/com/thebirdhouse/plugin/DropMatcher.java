@@ -121,6 +121,9 @@ public class DropMatcher {
             if (tile.isCompleted()) continue;
             if (tile.getSpecial() != null) continue;
 
+            // Skip tiles that already have enough submissions (even if not yet marked complete)
+            if (tile.getQuantity() > 1 && tile.getCurrentQty() >= tile.getQuantity()) continue;
+
             // For tile race, only match the tile the player is currently on
             if ("tilerace".equals(tile.getGameType()) && !tile.isCurrent()) continue;
 

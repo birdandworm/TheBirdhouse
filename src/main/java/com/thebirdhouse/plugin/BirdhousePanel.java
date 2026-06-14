@@ -320,6 +320,7 @@ public class BirdhousePanel extends PluginPanel {
 
     private static final Color COLOR_OPPONENT = new Color(220, 80, 80);
     private static final Color COLOR_HIT = new Color(220, 60, 60);
+    private static final Color COLOR_SUNK = new Color(160, 40, 40);
     private static final Color COLOR_MISS = new Color(80, 80, 120);
     private static final Color COLOR_ATTACKABLE = new Color(220, 140, 60);
 
@@ -412,9 +413,9 @@ public class BirdhousePanel extends PluginPanel {
                 if (tileIdx < tiles.size()) {
                     BoardTile tile = tiles.get(tileIdx);
                     String result = tile.getAttackResult();
-                    if ("hit".equals(result)) {
-                        cell.setBackground(COLOR_HIT);
-                        cell.setToolTipText("\u2716 HIT: " + tile.getName());
+                    if ("hit".equals(result) || "sunk".equals(result)) {
+                        cell.setBackground("sunk".equals(result) ? COLOR_SUNK : COLOR_HIT);
+                        cell.setToolTipText("sunk".equals(result) ? "\u2620 SUNK: " + tile.getName() : "\u2716 HIT: " + tile.getName());
                     } else if ("miss".equals(result)) {
                         cell.setBackground(COLOR_MISS);
                         cell.setToolTipText("\u25CB Miss");
@@ -826,7 +827,20 @@ public class BirdhousePanel extends PluginPanel {
     }
 
     private void renderBattleshipList(List<BoardTile> tiles) {
-        // Hits
+        // Sunk ships
+        List<BoardTile> sunk = tiles.stream()
+            .filter(t -> "sunk".equals(t.getAttackResult()))
+            .collect(Collectors.toList());
+        if (!sunk.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2620 Sunk (" + sunk.size() + ")", COLOR_SUNK));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : sunk) {
+                tilesPanel.add(createTileRow(tile, true, "\u2620 "));
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        // Hits (not yet sunk)
         List<BoardTile> hits = tiles.stream()
             .filter(t -> "hit".equals(t.getAttackResult()))
             .collect(Collectors.toList());
@@ -835,6 +849,19 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.add(Box.createVerticalStrut(4));
             for (BoardTile tile : hits) {
                 tilesPanel.add(createTileRow(tile, true, "\u2716 "));
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        // Misses
+        List<BoardTile> misses = tiles.stream()
+            .filter(t -> "miss".equals(t.getAttackResult()))
+            .collect(Collectors.toList());
+        if (!misses.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u25CB Misses (" + misses.size() + ")", COLOR_MISS));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : misses) {
+                tilesPanel.add(createTileRow(tile, false, "\u25CB "));
             }
             tilesPanel.add(Box.createVerticalStrut(8));
         }
@@ -950,8 +977,14 @@ public class BirdhousePanel extends PluginPanel {
         row.add(nameLabel, BorderLayout.WEST);
 
         if (tile.getQuantity() > 1) {
-            JLabel qtyLabel = new JLabel("x" + tile.getQuantity());
-            qtyLabel.setForeground(new Color(150, 150, 180));
+            String qtyText = tile.getCurrentQty() + "/" + tile.getQuantity();
+            JLabel qtyLabel = new JLabel(qtyText);
+            Color qtyColor = tile.getCurrentQty() >= tile.getQuantity()
+                ? new Color(120, 180, 120)
+                : tile.getCurrentQty() > 0
+                    ? new Color(220, 180, 60)
+                    : new Color(150, 150, 180);
+            qtyLabel.setForeground(qtyColor);
             qtyLabel.setFont(qtyLabel.getFont().deriveFont(10f));
             row.add(qtyLabel, BorderLayout.EAST);
         }
