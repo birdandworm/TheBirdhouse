@@ -3,8 +3,7 @@ package com.thebirdhouse.plugin;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ItemComposition;
-import net.runelite.api.NPCComposition;
-import net.runelite.client.events.ServerNpcLoot;
+import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.eventbus.Subscribe;
@@ -80,7 +79,7 @@ public class DropMatcher {
     }
 
     @Subscribe
-    public void onServerNpcLoot(ServerNpcLoot event) {
+    public void onLootReceived(LootReceived event) {
         if (!config.autoSubmitDrops()) {
             log.info("[Birdhouse] Auto-submit disabled in config, skipping loot event");
             return;
@@ -90,10 +89,9 @@ public class DropMatcher {
             return;
         }
 
-        NPCComposition npcComp = event.getComposition();
-        String npcName = npcComp != null ? npcComp.getName() : "Unknown";
+        String sourceName = event.getName();
 
-        log.info("[Birdhouse] Loot received from '{}': {} items", npcName, event.getItems().size());
+        log.info("[Birdhouse] Loot received from '{}' (type={}): {} items", sourceName, event.getType(), event.getItems().size());
 
         for (ItemStack itemStack : event.getItems()) {
             ItemComposition itemComp = itemManager.getItemComposition(itemStack.getId());
@@ -102,13 +100,13 @@ public class DropMatcher {
 
             log.info("[Birdhouse]   Item: '{}' x{}", itemName, quantity);
 
-            List<TileMatch> matches = findMatches(npcName, itemName, quantity);
+            List<TileMatch> matches = findMatches(sourceName, itemName, quantity);
             if (matches.isEmpty()) {
                 log.info("[Birdhouse]   No tile match for '{}'", itemName);
             }
             for (TileMatch match : matches) {
                 log.info("[Birdhouse]   MATCH! tile='{}' key={}", match.getTileName(), match.getTileKey());
-                submitMatch(match, npcName, itemName, quantity);
+                submitMatch(match, sourceName, itemName, quantity);
             }
         }
     }
