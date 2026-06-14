@@ -6,6 +6,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
@@ -56,11 +57,18 @@ public class BirdhousePlugin extends Plugin {
     @Inject
     private SessionTracker sessionTracker;
 
+    @Inject
+    private EventBus eventBus;
+
     private NavigationButton navButton;
 
     @Override
     protected void startUp() {
         log.info("The Birdhouse plugin started");
+
+        eventBus.register(dropMatcher);
+        eventBus.register(achievementTracker);
+
         String token = config.authToken();
         if (token != null) {
             token = token.trim();
@@ -100,6 +108,8 @@ public class BirdhousePlugin extends Plugin {
     @Override
     protected void shutDown() {
         log.info("The Birdhouse plugin stopped");
+        eventBus.unregister(dropMatcher);
+        eventBus.unregister(achievementTracker);
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();

@@ -54,6 +54,10 @@ public class DropMatcher {
         }
     }
 
+    public void setActiveRoomCode(String roomCode) {
+        this.activeRoomCode = roomCode;
+    }
+
     public void loadActiveBoard(String roomCode) {
         if (roomCode == null || roomCode.isEmpty()) {
             log.warn("[Birdhouse] loadActiveBoard called with empty roomCode");

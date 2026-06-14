@@ -209,6 +209,7 @@ public class BirdhousePanel extends PluginPanel {
                     countdownLabel.setText("");
                     return;
                 }
+                dropMatcher.setActiveRoomCode(fetchCode);
                 dropMatcher.updateBoard(board);
                 updatePanel(board, fetchCode);
             });
