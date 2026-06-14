@@ -455,9 +455,9 @@ public class BirdhousePanel extends PluginPanel {
                     cell.setPreferredSize(new Dimension(cellSize, cellSize));
                     String key = r + "-" + c;
                     String defResult = defGrid.get(key);
-                    if ("hit".equals(defResult)) {
-                        cell.setBackground(COLOR_HIT);
-                        cell.setToolTipText("Enemy hit here!");
+                    if ("hit".equals(defResult) || "sunk".equals(defResult)) {
+                        cell.setBackground("sunk".equals(defResult) ? COLOR_SUNK : COLOR_HIT);
+                        cell.setToolTipText("sunk".equals(defResult) ? "\u2620 Enemy sunk your ship!" : "Enemy hit here!");
                     } else if ("miss".equals(defResult)) {
                         cell.setBackground(COLOR_MISS);
                         cell.setToolTipText("Enemy missed");

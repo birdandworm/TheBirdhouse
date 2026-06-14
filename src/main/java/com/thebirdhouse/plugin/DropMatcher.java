@@ -124,6 +124,9 @@ public class DropMatcher {
             // Skip tiles that already have enough submissions (even if not yet marked complete)
             if (tile.getQuantity() > 1 && tile.getCurrentQty() >= tile.getQuantity()) continue;
 
+            // For battleship, skip tiles that already have an attack result (hit, miss, or sunk)
+            if ("battleship".equals(tile.getGameType()) && tile.getAttackResult() != null) continue;
+
             // For tile race, only match the tile the player is currently on
             if ("tilerace".equals(tile.getGameType()) && !tile.isCurrent()) continue;
 
