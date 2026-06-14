@@ -149,12 +149,10 @@ public class BirdhousePlugin extends Plugin {
     }
 
     private void loadBoard() {
-        String roomCode = config.roomCode();
-        if (roomCode != null) {
-            roomCode = roomCode.trim();
-        }
+        String rawCode = config.roomCode();
+        final String roomCode = (rawCode != null) ? rawCode.trim() : "";
 
-        if (roomCode == null || roomCode.isEmpty()) {
+        if (roomCode.isEmpty()) {
             log.info("[Birdhouse] No manual room code set, attempting auto-detect via active-rooms...");
             apiClient.fetchActiveRooms().thenAccept(rooms -> {
                 if (rooms != null && !rooms.isEmpty()) {
