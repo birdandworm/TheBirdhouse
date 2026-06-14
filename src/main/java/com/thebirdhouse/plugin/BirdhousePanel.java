@@ -210,7 +210,7 @@ public class BirdhousePanel extends PluginPanel {
                     return;
                 }
                 dropMatcher.updateBoard(board);
-                updatePanel(board, roomCode);
+                updatePanel(board, fetchCode);
             });
         });
     }
