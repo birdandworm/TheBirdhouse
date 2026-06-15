@@ -103,9 +103,9 @@ public class DropMatcher {
             List<TileMatch> matches = findMatches(sourceName, itemName, quantity);
             if (matches.isEmpty()) {
                 log.info("[Birdhouse]   No tile match for '{}'", itemName);
-            }
-            for (TileMatch match : matches) {
-                log.info("[Birdhouse]   MATCH! tile='{}' key={}", match.getTileName(), match.getTileKey());
+            } else {
+                TileMatch match = matches.get(0);
+                log.info("[Birdhouse]   MATCH! tile='{}' key={} (of {} matching tiles)", match.getTileName(), match.getTileKey(), matches.size());
                 submitMatch(match, sourceName, itemName, quantity);
             }
         }
