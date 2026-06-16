@@ -54,18 +54,46 @@ public class BirdhouseOverlay extends OverlayPanel {
             .color(new Color(93, 164, 196))
             .build());
 
-        panelComponent.getChildren().add(LineComponent.builder()
-            .left("Tiles:")
-            .right(completed + " / " + total)
-            .rightColor(completed == total ? Color.GREEN : Color.WHITE)
-            .build());
+        boolean isBattleship = "battleship".equals(board.getGameType());
+        BoardData.BattleshipMeta bsMeta = board.getBattleshipMeta();
 
-        int remaining = total - completed;
-        panelComponent.getChildren().add(LineComponent.builder()
-            .left("Remaining:")
-            .right(String.valueOf(remaining))
-            .rightColor(remaining == 0 ? Color.GREEN : new Color(255, 200, 100))
-            .build());
+        if (isBattleship && bsMeta != null && bsMeta.getEnemyShipsTotal() != null && bsMeta.getEnemyShipsTotal() > 0) {
+            // For battleship, track the opponent's fleet rather than board tiles.
+            int shipTotal = bsMeta.getEnemyShipsTotal();
+            int shipAfloat = bsMeta.getEnemyShipsRemaining() != null ? bsMeta.getEnemyShipsRemaining() : shipTotal;
+            int shipSunk = shipTotal - shipAfloat;
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left("Enemy sunk:")
+                .right(shipSunk + " / " + shipTotal)
+                .rightColor(shipSunk == shipTotal ? Color.GREEN : Color.WHITE)
+                .build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left("Afloat:")
+                .right(String.valueOf(shipAfloat))
+                .rightColor(shipAfloat == 0 ? Color.GREEN : new Color(255, 200, 100))
+                .build());
+        } else if (isBattleship) {
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left("Enemy fleet:")
+                .right("hidden")
+                .rightColor(new Color(150, 150, 180))
+                .build());
+        } else {
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left("Tiles:")
+                .right(completed + " / " + total)
+                .rightColor(completed == total ? Color.GREEN : Color.WHITE)
+                .build());
+
+            int remaining = total - completed;
+            panelComponent.getChildren().add(LineComponent.builder()
+                .left("Remaining:")
+                .right(String.valueOf(remaining))
+                .rightColor(remaining == 0 ? Color.GREEN : new Color(255, 200, 100))
+                .build());
+        }
 
         String roomCode = config.roomCode();
         if (roomCode != null && !roomCode.isEmpty()) {

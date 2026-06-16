@@ -49,6 +49,13 @@ public class BoardData {
         private Map<String, String> defenseGrid;
         private List<BattleshipShip> ourShips;
         private List<BattleshipShip> sunkEnemyShips;
+        // Public enemy fleet summary (name + sunk status, no cell positions).
+        private List<BattleshipShip> enemyFleet;
+        // Ship counts so the overlay can show how many opponent ships remain afloat.
+        private Integer enemyShipsTotal;
+        private Integer enemyShipsRemaining;
+        private Integer myShipsTotal;
+        private Integer myShipsRemaining;
         private String turn;
         private String myTeam;
         private String enemyTeam;
@@ -57,6 +64,7 @@ public class BoardData {
     @Data
     public static class BattleshipShip {
         private String name;
+        private int size;
         private List<int[]> cells;
         private boolean sunk;
     }

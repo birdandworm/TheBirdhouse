@@ -235,7 +235,22 @@ public class BirdhousePanel extends PluginPanel {
         int remaining = total - completed;
 
         statusLabel.setText("Room: " + roomCode + " \u2022 " + formatGameType(gameType));
-        progressLabel.setText(completed + " / " + total + " complete (" + remaining + " remaining)");
+
+        // For battleship, the meaningful progress is how many of the opponent's ships are
+        // still afloat \u2014 not how many board tiles are unmarked.
+        if ("battleship".equals(gameType)) {
+            BoardData.BattleshipMeta meta = board.getBattleshipMeta();
+            if (meta != null && meta.getEnemyShipsTotal() != null && meta.getEnemyShipsTotal() > 0) {
+                int shipTotal = meta.getEnemyShipsTotal();
+                int shipRemaining = meta.getEnemyShipsRemaining() != null ? meta.getEnemyShipsRemaining() : shipTotal;
+                int shipSunk = shipTotal - shipRemaining;
+                progressLabel.setText(shipSunk + " / " + shipTotal + " enemy ships sunk (" + shipRemaining + " afloat)");
+            } else {
+                progressLabel.setText("Enemy fleet hidden until ships are placed");
+            }
+        } else {
+            progressLabel.setText(completed + " / " + total + " complete (" + remaining + " remaining)");
+        }
 
         // Countdown
         currentDeadline = board.getDeadline();
