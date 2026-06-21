@@ -141,12 +141,17 @@ public class DropMatcher {
     }
 
     private boolean matchesTile(BoardTile tile, String npcName, String itemName) {
-        // Check matchItems list first (generic tiles / presets)
+        // Check matchItems list first (generic tiles / presets / collect-all)
         List<String> matchItems = tile.getMatchItems();
         if (matchItems != null && !matchItems.isEmpty()) {
             String item = itemName.toLowerCase();
             for (String acceptable : matchItems) {
                 if (acceptable != null && acceptable.toLowerCase().equals(item)) {
+                    // For "collect all" tiles, don't re-submit an item we've already collected.
+                    if (tile.isMatchAll() && isAlreadyCollected(tile, item)) {
+                        log.debug("[Birdhouse]     '{}' already collected for collect-all tile '{}'", itemName, tile.getName());
+                        return false;
+                    }
                     log.debug("[Birdhouse]     matchItems hit: '{}' in list for tile '{}'", itemName, tile.getName());
                     return true;
                 }
@@ -175,6 +180,15 @@ public class DropMatcher {
         // Boss name only match (any unique from this boss)
         if (target.equals(npc) && tile.isAnyUnique()) return true;
 
+        return false;
+    }
+
+    private boolean isAlreadyCollected(BoardTile tile, String itemLower) {
+        List<String> collected = tile.getCollectedItems();
+        if (collected == null || collected.isEmpty()) return false;
+        for (String c : collected) {
+            if (c != null && c.toLowerCase().equals(itemLower)) return true;
+        }
         return false;
     }
 
