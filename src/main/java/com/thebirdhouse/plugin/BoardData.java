@@ -14,6 +14,11 @@ public class BoardData {
     private Integer position;
     private Long deadline;
 
+    // Whether the game is still live. When false (game ended / deadline passed),
+    // the panel backs off its polling cadence. Defaults true for older API responses.
+    private Boolean active;
+    private String status;
+
     // Tile Race: opponent positions
     private List<OpponentPosition> opponents;
 

@@ -27,7 +27,10 @@ public class BirdhousePanel extends PluginPanel {
     private static final Color COLOR_BRAND = new Color(93, 164, 196);
 
     private static final int PANEL_WIDTH = 225;
-    private static final int AUTO_REFRESH_SECONDS = 60;
+    // Poll quickly while a game is live; back off hard when idle or the game has ended
+    // so we don't keep hitting the server for dead/stale rooms.
+    private static final int POLL_ACTIVE_SECONDS = 60;
+    private static final int POLL_IDLE_SECONDS = 300;
 
     private final BirdhouseConfig config;
     private final DropMatcher dropMatcher;
@@ -135,9 +138,19 @@ public class BirdhousePanel extends PluginPanel {
             scheduler = Executors.newSingleThreadScheduledExecutor();
         }
         stopAutoRefresh();
-        autoRefreshTask = scheduler.scheduleAtFixedRate(
+        scheduleNextRefresh(POLL_ACTIVE_SECONDS);
+    }
+
+    // Self-rescheduling poll: each refresh decides how long to wait before the next one
+    // based on whether the game is still live.
+    private void scheduleNextRefresh(int seconds) {
+        if (scheduler == null || scheduler.isShutdown()) return;
+        if (autoRefreshTask != null) {
+            autoRefreshTask.cancel(false);
+        }
+        autoRefreshTask = scheduler.schedule(
             () -> SwingUtilities.invokeLater(this::refreshBoard),
-            AUTO_REFRESH_SECONDS, AUTO_REFRESH_SECONDS, TimeUnit.SECONDS
+            seconds, TimeUnit.SECONDS
         );
     }
 
@@ -192,6 +205,8 @@ public class BirdhousePanel extends PluginPanel {
             tilesPanel.removeAll();
             boardPanel.revalidate();
             tilesPanel.revalidate();
+            // No room to track — idle until login/config change or a manual refresh.
+            scheduleNextRefresh(POLL_IDLE_SECONDS);
             return;
         }
 
@@ -207,11 +222,16 @@ public class BirdhousePanel extends PluginPanel {
                     statusLabel.setText("Failed to load board");
                     progressLabel.setText("");
                     countdownLabel.setText("");
+                    // Transient failure — retry on the normal cadence.
+                    scheduleNextRefresh(POLL_ACTIVE_SECONDS);
                     return;
                 }
                 dropMatcher.setActiveRoomCode(fetchCode);
                 dropMatcher.updateBoard(board);
                 updatePanel(board, fetchCode);
+                // Back off once the game is no longer live (older servers omit the flag → treat as live).
+                boolean live = board.getActive() == null || board.getActive();
+                scheduleNextRefresh(live ? POLL_ACTIVE_SECONDS : POLL_IDLE_SECONDS);
             });
         });
     }
@@ -234,7 +254,8 @@ public class BirdhousePanel extends PluginPanel {
         int completed = (int) tiles.stream().filter(BoardTile::isCompleted).count();
         int remaining = total - completed;
 
-        statusLabel.setText("Room: " + roomCode + " \u2022 " + formatGameType(gameType));
+        boolean ended = Boolean.FALSE.equals(board.getActive());
+        statusLabel.setText("Room: " + roomCode + " \u2022 " + formatGameType(gameType) + (ended ? " (ended)" : ""));
 
         // For battleship, the meaningful progress is how many of the opponent's ships are
         // still afloat \u2014 not how many board tiles are unmarked.
