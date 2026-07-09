@@ -155,9 +155,10 @@ public class DropMatcher {
             String item = itemName.toLowerCase();
             for (String acceptable : matchItems) {
                 if (acceptable != null && acceptable.toLowerCase().equals(item)) {
-                    // For "collect all" tiles, don't re-submit an item we've already collected.
-                    if (tile.isMatchAll() && isAlreadyCollected(tile, item)) {
-                        log.debug("[Birdhouse]     '{}' already collected for collect-all tile '{}'", itemName, tile.getName());
+                    // For "collect all" tiles, only stop once this item has reached its
+                    // required quantity (so x4 items keep matching until all 4 are in).
+                    if (tile.isMatchAll() && itemQuantityMet(tile, item)) {
+                        log.debug("[Birdhouse]     '{}' already at required qty for collect-all tile '{}'", itemName, tile.getName());
                         return false;
                     }
                     log.debug("[Birdhouse]     matchItems hit: '{}' in list for tile '{}'", itemName, tile.getName());
@@ -191,13 +192,25 @@ public class DropMatcher {
         return false;
     }
 
-    private boolean isAlreadyCollected(BoardTile tile, String itemLower) {
-        List<String> collected = tile.getCollectedItems();
-        if (collected == null || collected.isEmpty()) return false;
-        for (String c : collected) {
-            if (c != null && c.toLowerCase().equals(itemLower)) return true;
+    // For a collect-all tile: has this item already reached its required quantity?
+    private boolean itemQuantityMet(BoardTile tile, String itemLower) {
+        int need = 1;
+        if (tile.getItemQuantities() != null) {
+            Integer q = tile.getItemQuantities().get(itemLower);
+            if (q != null && q > 0) need = q;
         }
-        return false;
+        int have = 0;
+        if (tile.getCollectedCounts() != null) {
+            Integer c = tile.getCollectedCounts().get(itemLower);
+            if (c != null) have = c;
+        }
+        // Fallback for older servers that only sent distinct collectedItems (no counts).
+        if (tile.getCollectedCounts() == null && tile.getCollectedItems() != null) {
+            for (String c : tile.getCollectedItems()) {
+                if (c != null && c.toLowerCase().equals(itemLower)) { have = Math.max(have, 1); break; }
+            }
+        }
+        return have >= need;
     }
 
     private void warnNotStarted(TileMatch match, String itemName) {

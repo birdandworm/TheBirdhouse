@@ -2,6 +2,7 @@ package com.thebirdhouse.plugin;
 
 import lombok.Data;
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class BoardTile {
@@ -24,6 +25,10 @@ public class BoardTile {
     private boolean matchAll;
     private List<String> requiredItems;
     private List<String> collectedItems; // lowercased item names already submitted/approved
+    // Per-item required quantity and collected count, keyed by lowercased item name.
+    // Missing entries mean "1 required" / "0 collected".
+    private Map<String, Integer> itemQuantities;
+    private Map<String, Integer> collectedCounts;
 
     // Territory War extras
     private String territoryName;
