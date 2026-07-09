@@ -106,7 +106,15 @@ public class DropMatcher {
             } else {
                 TileMatch match = matches.get(0);
                 log.info("[Birdhouse]   MATCH! tile='{}' key={} (of {} matching tiles)", match.getTileName(), match.getTileKey(), matches.size());
-                submitMatch(match, sourceName, itemName, quantity);
+                // Drops don't count until the board is locked / event has started.
+                // Warn the player to screenshot so the drop isn't lost (older servers omit
+                // the flag → treat as started and submit as before).
+                if (Boolean.FALSE.equals(activeBoard.getStarted())) {
+                    log.info("[Birdhouse]   Event not started — not submitting '{}', warning player to screenshot", itemName);
+                    warnNotStarted(match, itemName);
+                } else {
+                    submitMatch(match, sourceName, itemName, quantity);
+                }
             }
         }
     }
@@ -190,6 +198,17 @@ public class DropMatcher {
             if (c != null && c.toLowerCase().equals(itemLower)) return true;
         }
         return false;
+    }
+
+    private void warnNotStarted(TileMatch match, String itemName) {
+        client.addChatMessage(
+            net.runelite.api.ChatMessageType.GAMEMESSAGE,
+            "",
+            "[Birdhouse] Event not started yet \u2014 screenshot this drop (" + itemName
+                + ") so it can be submitted after the board is locked!",
+            ""
+        );
+        overlay.setLastMatch(match.getTileName() + " (not started \u2014 screenshot!)", itemName);
     }
 
     private void submitMatch(TileMatch match, String npcName, String itemName, int quantity) {

@@ -19,6 +19,10 @@ public class BoardData {
     private Boolean active;
     private String status;
 
+    // Whether the event has started/locked. When explicitly false, drops don't count
+    // yet — the plugin warns the player to screenshot instead of auto-submitting.
+    private Boolean started;
+
     // Tile Race: opponent positions
     private List<OpponentPosition> opponents;
 
