@@ -155,10 +155,10 @@ public class DropMatcher {
             String item = itemName.toLowerCase();
             for (String acceptable : matchItems) {
                 if (acceptable != null && acceptable.toLowerCase().equals(item)) {
-                    // For "collect all" tiles, only stop once this item has reached its
-                    // required quantity (so x4 items keep matching until all 4 are in).
-                    if (tile.isMatchAll() && itemQuantityMet(tile, item)) {
-                        log.debug("[Birdhouse]     '{}' already at required qty for collect-all tile '{}'", itemName, tile.getName());
+                    // For "collect all" tiles, only stop once every slot that accepts this
+                    // item is already full (so x4 / OR-alternative slots keep matching).
+                    if (tile.isMatchAll() && itemAlreadySatisfied(tile, item)) {
+                        log.debug("[Birdhouse]     '{}' no longer needed for collect-all tile '{}'", itemName, tile.getName());
                         return false;
                     }
                     log.debug("[Birdhouse]     matchItems hit: '{}' in list for tile '{}'", itemName, tile.getName());
@@ -192,20 +192,45 @@ public class DropMatcher {
         return false;
     }
 
-    // For a collect-all tile: has this item already reached its required quantity?
-    private boolean itemQuantityMet(BoardTile tile, String itemLower) {
+    // For a collect-all tile: is this item no longer needed? True only when every slot
+    // that accepts the item has already reached its required quantity.
+    private boolean itemAlreadySatisfied(BoardTile tile, String itemLower) {
+        java.util.Map<String, Integer> counts = tile.getCollectedCounts();
+
+        // Preferred path: slot (OR-group) definitions.
+        if (tile.getMatchGroups() != null && !tile.getMatchGroups().isEmpty()) {
+            for (BoardTile.MatchGroup g : tile.getMatchGroups()) {
+                if (g.getItems() == null) continue;
+                boolean contains = false;
+                for (String it : g.getItems()) {
+                    if (it != null && it.toLowerCase().equals(itemLower)) { contains = true; break; }
+                }
+                if (!contains) continue;
+                int need = g.getQty() > 0 ? g.getQty() : 1;
+                int have = 0;
+                if (counts != null) {
+                    for (String it : g.getItems()) {
+                        Integer c = it == null ? null : counts.get(it.toLowerCase());
+                        if (c != null) have += c;
+                    }
+                }
+                if (have < need) return false; // this slot still needs the item
+            }
+            return true;
+        }
+
+        // Fallback: per-item quantities (flat collect-all tiles / older servers).
         int need = 1;
         if (tile.getItemQuantities() != null) {
             Integer q = tile.getItemQuantities().get(itemLower);
             if (q != null && q > 0) need = q;
         }
         int have = 0;
-        if (tile.getCollectedCounts() != null) {
-            Integer c = tile.getCollectedCounts().get(itemLower);
+        if (counts != null) {
+            Integer c = counts.get(itemLower);
             if (c != null) have = c;
         }
-        // Fallback for older servers that only sent distinct collectedItems (no counts).
-        if (tile.getCollectedCounts() == null && tile.getCollectedItems() != null) {
+        if (counts == null && tile.getCollectedItems() != null) {
             for (String c : tile.getCollectedItems()) {
                 if (c != null && c.toLowerCase().equals(itemLower)) { have = Math.max(have, 1); break; }
             }

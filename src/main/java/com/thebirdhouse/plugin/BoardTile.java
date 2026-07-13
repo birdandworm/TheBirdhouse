@@ -21,7 +21,7 @@ public class BoardTile {
     private int quantity;
     private int currentQty;
 
-    // "Collect all" (AND) tiles: require every item in requiredItems.
+    // "Collect all" (AND) tiles: require every slot in matchGroups to be filled.
     private boolean matchAll;
     private List<String> requiredItems;
     private List<String> collectedItems; // lowercased item names already submitted/approved
@@ -29,6 +29,14 @@ public class BoardTile {
     // Missing entries mean "1 required" / "0 collected".
     private Map<String, Integer> itemQuantities;
     private Map<String, Integer> collectedCounts;
+    // Slots (OR-groups): each slot is satisfied by any one of its items reaching qty.
+    private List<MatchGroup> matchGroups;
+
+    @Data
+    public static class MatchGroup {
+        private List<String> items; // lowercased acceptable item names for this slot
+        private int qty;
+    }
 
     // Territory War extras
     private String territoryName;
