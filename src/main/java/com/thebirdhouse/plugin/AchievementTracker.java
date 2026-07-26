@@ -11,6 +11,7 @@ import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -107,9 +108,22 @@ public class AchievementTracker {
         if (activeBoard == null || activeBoard.getTiles() == null) return;
 
         String search = achievementName.toLowerCase();
+        // Collection-log unlocks are concrete items: match them strictly against the
+        // tile's accepted item list (or an exact matchName). Loose substring matching
+        // caused false positives (e.g. "Vorkath's head" matching a "Vorkath" visage
+        // tile). Quests/pets/levels stay on the looser label match.
+        boolean strict = "collection_log".equals(achievementType);
 
         for (BoardTile tile : activeBoard.getTiles()) {
             if (tile.isCompleted()) continue;
+
+            if (strict) {
+                if (collectionItemMatchesTile(tile, search)) {
+                    submitAchievement(tile, achievementName, achievementType);
+                    break;
+                }
+                continue;
+            }
 
             String matchName = tile.getMatchName();
             if (matchName == null || matchName.isEmpty()) continue;
@@ -122,6 +136,22 @@ public class AchievementTracker {
                 break;
             }
         }
+    }
+
+    // Strict collection-log matching: the unlocked item must be one of the tile's
+    // explicit accepted items (matchItems), or exactly equal the tile's matchName.
+    // No substring matching — that produced cross-tile false positives.
+    private boolean collectionItemMatchesTile(BoardTile tile, String itemLower) {
+        List<String> matchItems = tile.getMatchItems();
+        if (matchItems != null && !matchItems.isEmpty()) {
+            for (String acc : matchItems) {
+                if (acc != null && acc.toLowerCase().equals(itemLower)) return true;
+            }
+            return false;
+        }
+        String matchName = tile.getMatchName();
+        if (matchName == null || matchName.isEmpty()) return false;
+        return matchName.toLowerCase().equals(itemLower);
     }
 
     private void submitAchievement(BoardTile tile, String achievementName, String achievementType) {
