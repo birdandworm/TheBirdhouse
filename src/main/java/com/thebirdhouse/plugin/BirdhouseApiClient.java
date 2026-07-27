@@ -19,6 +19,12 @@ import java.util.concurrent.CompletableFuture;
 public class BirdhouseApiClient {
 
     private static final String BASE_URL = "https://thebirdhouse.games/api/plugin";
+    // Dedicated always-on cache host for the high-frequency board poll. This is a
+    // read-only mirror that serves byte-identical /board responses far more cheaply
+    // than Cloud Functions. Only fetchBoard() uses it; if it is ever unreachable or
+    // errors, fetchBoard() transparently falls back to BASE_URL, so boards keep
+    // working even if this host is down.
+    private static final String BOARD_BASE_URL = "https://api.thebirdhouse.games";
     private static final MediaType JSON_TYPE = MediaType.parse("application/json; charset=utf-8");
     private static final MediaType IMAGE_TYPE = MediaType.parse("image/jpeg");
 
@@ -75,26 +81,44 @@ public class BirdhouseApiClient {
 
     /**
      * Fetch the active board tiles for a room so we can match drops locally.
+     *
+     * Tries the dedicated cache host first (cheap, always-on) and transparently
+     * falls back to the primary backend on any network error or non-2xx response,
+     * so a cache-host outage never breaks board loading.
      */
     public CompletableFuture<BoardData> fetchBoard(String roomCode) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
-                Request request = new Request.Builder()
-                    .url(BASE_URL + "/board/" + roomCode)
-                    .header("Authorization", "Bearer " + authToken)
-                    .get()
-                    .build();
-
-                try (Response response = httpClient.newCall(request).execute()) {
-                    if (response.isSuccessful() && response.body() != null) {
-                        return gson.fromJson(response.body().string(), BoardData.class);
-                    }
-                }
-            } catch (IOException e) {
-                log.error("Failed to fetch board data", e);
+            BoardData board = requestBoard(BOARD_BASE_URL, roomCode);
+            if (board != null) {
+                return board;
             }
-            return null;
+            log.debug("Board cache host unavailable for {}, falling back to primary backend", roomCode);
+            return requestBoard(BASE_URL, roomCode);
         });
+    }
+
+    /**
+     * Perform a single GET /board/{roomCode} against the given base URL.
+     * Returns parsed BoardData on a 2xx response with a body, or null on any
+     * network error / non-2xx so the caller can fall back to another host.
+     */
+    private BoardData requestBoard(String base, String roomCode) {
+        try {
+            Request request = new Request.Builder()
+                .url(base + "/board/" + roomCode)
+                .header("Authorization", "Bearer " + authToken)
+                .get()
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful() && response.body() != null) {
+                    return gson.fromJson(response.body().string(), BoardData.class);
+                }
+            }
+        } catch (IOException e) {
+            log.debug("Board fetch failed from {}: {}", base, e.getMessage());
+        }
+        return null;
     }
 
     /**
