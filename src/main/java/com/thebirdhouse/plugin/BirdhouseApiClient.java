@@ -145,6 +145,34 @@ public class BirdhouseApiClient {
     }
 
     /**
+     * Report a batched activity delta (active time, NPC kills, total loot GP) to the
+     * /loot endpoint. Fire-and-forget: never blocks the game thread and swallows
+     * failures so a hiccup can't disrupt gameplay (the next flush re-sends).
+     */
+    public void reportActivity(ActivityPayload payload) {
+        if (authToken == null || authToken.isEmpty()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                Request request = new Request.Builder()
+                    .url(BASE_URL + "/loot")
+                    .header("Authorization", "Bearer " + authToken)
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(payload)))
+                    .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (!response.isSuccessful()) {
+                        log.debug("Activity report failed: {}", response.code());
+                    }
+                }
+            } catch (IOException e) {
+                log.debug("Failed to report activity", e);
+            }
+        });
+    }
+
+    /**
      * Fetch the player's active rooms for auto-detection.
      */
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
