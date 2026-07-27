@@ -22,6 +22,9 @@ public class SessionTracker {
     @Inject
     private BirdhouseApiClient apiClient;
 
+    @Inject
+    private ActivityTracker activityTracker;
+
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> heartbeatTask;
     private String currentPlayer;
@@ -37,10 +40,18 @@ public class SessionTracker {
         currentPlayer = playerName;
         sessionStart = System.currentTimeMillis();
 
+        // Start each session with a clean activity slate so nothing carries over.
+        activityTracker.reset();
+
         apiClient.reportSession(new SessionEvent("login", playerName, sessionStart));
 
+        // Piggyback the leaderboard-activity flush on the session heartbeat so it
+        // costs no extra request cadence of its own.
         heartbeatTask = scheduler.scheduleAtFixedRate(
-            () -> apiClient.reportSession(new SessionEvent("heartbeat", playerName, System.currentTimeMillis())),
+            () -> {
+                apiClient.reportSession(new SessionEvent("heartbeat", playerName, System.currentTimeMillis()));
+                activityTracker.flush();
+            },
             HEARTBEAT_INTERVAL_MS,
             HEARTBEAT_INTERVAL_MS,
             TimeUnit.MILLISECONDS
@@ -56,6 +67,9 @@ public class SessionTracker {
             heartbeatTask.cancel(false);
             heartbeatTask = null;
         }
+
+        // Flush any remaining activity before the session closes.
+        activityTracker.flush();
 
         long duration = System.currentTimeMillis() - sessionStart;
         SessionEvent event = new SessionEvent("logout", currentPlayer, System.currentTimeMillis());

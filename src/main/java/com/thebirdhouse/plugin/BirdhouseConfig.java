@@ -106,4 +106,15 @@ public interface BirdhouseConfig extends Config {
     default boolean trackActivity() {
         return true;
     }
+
+    @ConfigItem(
+        keyName = "contributeActivityStats",
+        name = "Contribute Leaderboard Stats",
+        description = "Send active playtime, NPC kills, and total loot value to event leaderboards while you're in an event room. Batched and sent every few minutes.",
+        section = activitySection,
+        position = 1
+    )
+    default boolean contributeActivityStats() {
+        return true;
+    }
 }

@@ -43,6 +43,9 @@ public class BirdhousePlugin extends Plugin {
     private AchievementTracker achievementTracker;
 
     @Inject
+    private ActivityTracker activityTracker;
+
+    @Inject
     private OverlayManager overlayManager;
 
     @Inject
@@ -68,6 +71,7 @@ public class BirdhousePlugin extends Plugin {
 
         eventBus.register(dropMatcher);
         eventBus.register(achievementTracker);
+        eventBus.register(activityTracker);
 
         String token = config.authToken();
         if (token != null) {
@@ -110,6 +114,7 @@ public class BirdhousePlugin extends Plugin {
         log.info("The Birdhouse plugin stopped");
         eventBus.unregister(dropMatcher);
         eventBus.unregister(achievementTracker);
+        eventBus.unregister(activityTracker);
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();
@@ -169,6 +174,7 @@ public class BirdhousePlugin extends Plugin {
                     String autoCode = rooms.get(0).getCode();
                     log.info("[Birdhouse] Auto-detected room: {} (from {} active rooms)", autoCode, rooms.size());
                     birdhousePanel.setActiveRoomCode(autoCode);
+                    activityTracker.setActiveRoom(autoCode);
                     dropMatcher.loadActiveBoard(autoCode);
                     apiClient.fetchBoard(autoCode).thenAccept(board -> {
                         if (board != null) {
@@ -184,6 +190,7 @@ public class BirdhousePlugin extends Plugin {
         } else {
             log.info("[Birdhouse] Using manual room code: {}", roomCode);
             birdhousePanel.setActiveRoomCode(roomCode);
+            activityTracker.setActiveRoom(roomCode);
             dropMatcher.loadActiveBoard(roomCode);
             apiClient.fetchBoard(roomCode).thenAccept(board -> {
                 if (board != null) {
