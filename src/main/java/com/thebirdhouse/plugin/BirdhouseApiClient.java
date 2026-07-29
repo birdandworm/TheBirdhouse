@@ -82,27 +82,48 @@ public class BirdhouseApiClient {
     /**
      * Fetch the active board tiles for a room so we can match drops locally.
      *
-     * Tries the dedicated cache host first (cheap, always-on) and transparently
-     * falls back to the primary backend on any network error or non-2xx response,
-     * so a cache-host outage never breaks board loading.
+     * Tries the dedicated cache host first (cheap, always-on) and falls back to the
+     * primary backend only when the cache host itself is unhealthy, so a cache-host
+     * outage never breaks board loading.
+     *
+     * A 4xx is NOT a reason to fall back: both hosts read the same database, so an
+     * unknown room code or a non-member token gets the identical answer from either
+     * one. Retrying would just double every poll, forever, for anyone sitting on a
+     * stale room code.
      */
     public CompletableFuture<BoardData> fetchBoard(String roomCode) {
         return CompletableFuture.supplyAsync(() -> {
-            BoardData board = requestBoard(BOARD_BASE_URL, roomCode);
-            if (board != null) {
-                return board;
+            BoardResult cached = requestBoard(BOARD_BASE_URL, roomCode);
+            if (cached.board != null) {
+                return cached.board;
+            }
+            if (!cached.retryable) {
+                return null;
             }
             log.debug("Board cache host unavailable for {}, falling back to primary backend", roomCode);
-            return requestBoard(BASE_URL, roomCode);
+            return requestBoard(BASE_URL, roomCode).board;
         });
     }
 
     /**
-     * Perform a single GET /board/{roomCode} against the given base URL.
-     * Returns parsed BoardData on a 2xx response with a body, or null on any
-     * network error / non-2xx so the caller can fall back to another host.
+     * Outcome of one board request: the parsed board when it succeeded, plus whether
+     * a different host is worth trying (host unreachable / 5xx) versus the response
+     * being an authoritative answer we'd only receive again (4xx).
      */
-    private BoardData requestBoard(String base, String roomCode) {
+    private static final class BoardResult {
+        private final BoardData board;
+        private final boolean retryable;
+
+        private BoardResult(BoardData board, boolean retryable) {
+            this.board = board;
+            this.retryable = retryable;
+        }
+    }
+
+    /**
+     * Perform a single GET /board/{roomCode} against the given base URL.
+     */
+    private BoardResult requestBoard(String base, String roomCode) {
         try {
             Request request = new Request.Builder()
                 .url(base + "/board/" + roomCode)
@@ -112,13 +133,18 @@ public class BirdhouseApiClient {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
-                    return gson.fromJson(response.body().string(), BoardData.class);
+                    BoardData parsed = gson.fromJson(response.body().string(), BoardData.class);
+                    // A 2xx we can't parse means this host is misbehaving, not that the
+                    // room is bad, so the caller may still try elsewhere.
+                    return new BoardResult(parsed, parsed == null);
                 }
+                int code = response.code();
+                return new BoardResult(null, code >= 500 || code == 429 || code == 408);
             }
         } catch (IOException e) {
             log.debug("Board fetch failed from {}: {}", base, e.getMessage());
+            return new BoardResult(null, true);
         }
-        return null;
     }
 
     /**
