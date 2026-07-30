@@ -259,7 +259,19 @@ public class BirdhousePanel extends PluginPanel {
 
         // For battleship, the meaningful progress is how many of the opponent's ships are
         // still afloat \u2014 not how many board tiles are unmarked.
-        if ("battleship".equals(gameType)) {
+        // The Delve has no checklist to complete — supplies are the currency and sigils are
+        // the objective, so a tile count says nothing about how the run is going.
+        if ("delve".equals(gameType)) {
+            BoardData.DelveMeta dm = board.getDelveMeta();
+            if (dm != null) {
+                String sigils = dm.getSigilsNeeded() > 0
+                    ? "  \u2022  " + dm.getSigilsHeld() + "/" + dm.getSigilsNeeded() + " sigils"
+                    : "";
+                progressLabel.setText(dm.getSupplies() + " supplies" + sigils);
+            } else {
+                progressLabel.setText("Waiting for the Delve to be set up");
+            }
+        } else if ("battleship".equals(gameType)) {
             BoardData.BattleshipMeta meta = board.getBattleshipMeta();
             if (meta != null && meta.getEnemyShipsTotal() != null && meta.getEnemyShipsTotal() > 0) {
                 int shipTotal = meta.getEnemyShipsTotal();
@@ -349,9 +361,56 @@ public class BirdhousePanel extends PluginPanel {
                 return renderTerritoryBoard(board);
             case "monopoly":
                 return renderMonopolyBoard(board);
+            case "delve":
+                return renderDelveBoard(board);
             default:
                 return new JPanel();
         }
+    }
+
+    // A 16x16 Delve map is unreadable at panel width and the website already draws it, so
+    // this space goes to the numbers a player actually acts on: what the party can spend,
+    // and where the supplies came from.
+    private JPanel renderDelveBoard(BoardData board) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+
+        BoardData.DelveMeta dm = board.getDelveMeta();
+        if (dm == null) return panel;
+
+        JLabel supplies = new JLabel(String.valueOf(dm.getSupplies()));
+        supplies.setForeground(COLOR_BRAND);
+        supplies.setFont(supplies.getFont().deriveFont(Font.BOLD, 26f));
+        supplies.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(supplies);
+
+        JLabel caption = new JLabel("supplies to spend");
+        caption.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        caption.setFont(caption.getFont().deriveFont(10f));
+        caption.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(caption);
+
+        panel.add(Box.createVerticalStrut(4));
+
+        JLabel split = new JLabel("\u2694 " + dm.getFromKills()
+            + "   \uD83D\uDCE6 " + dm.getBonusEarned()
+            + "   \u2212" + dm.getSpent() + " spent");
+        split.setForeground(new Color(150, 150, 180));
+        split.setFont(split.getFont().deriveFont(10f));
+        split.setAlignmentX(Component.CENTER_ALIGNMENT);
+        split.setToolTipText("Earned from kills, plus bonus drops, minus what the party has spent");
+        panel.add(split);
+
+        String progress = dm.getRoomsOpened() + " rooms opened";
+        if (dm.isVaultCleared()) progress = "\uD83C\uDFC6 Vault cracked \u2022 " + progress;
+        JLabel rooms = new JLabel(progress);
+        rooms.setForeground(dm.isVaultCleared() ? COLOR_COMPLETED : new Color(150, 150, 180));
+        rooms.setFont(rooms.getFont().deriveFont(10f));
+        rooms.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(rooms);
+
+        return panel;
     }
 
     private static final Color COLOR_OPPONENT = new Color(220, 80, 80);
@@ -754,6 +813,8 @@ public class BirdhousePanel extends PluginPanel {
             renderTerritoryList(tiles);
         } else if ("battleship".equals(gameType)) {
             renderBattleshipList(tiles);
+        } else if ("delve".equals(gameType)) {
+            renderDelveList(tiles, board);
         } else {
             renderDefaultList(tiles);
         }
@@ -977,6 +1038,118 @@ public class BirdhousePanel extends PluginPanel {
         }
     }
 
+    /**
+     * The Delve's list is not a checklist. Its three groups answer three different
+     * questions, and conflating them is what made the old panel useless here: the boss
+     * table is what you should be killing right now, the objectives are the only drops
+     * actually required, and the bonus drops are pure upside that nobody is assigned.
+     */
+    private void renderDelveList(List<BoardTile> tiles, BoardData board) {
+        BoardData.DelveMeta dm = board.getDelveMeta();
+
+        List<BoardData.DelveBoss> bosses = (dm != null && dm.getBosses() != null)
+            ? dm.getBosses()
+            : java.util.Collections.<BoardData.DelveBoss>emptyList();
+        if (!bosses.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2694 Kill for supplies (" + bosses.size() + ")", COLOR_BRAND));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardData.DelveBoss boss : bosses) {
+                tilesPanel.add(createDelveBossRow(boss));
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        // Guardians and the warden: the only drops the Delve genuinely requires, and only
+        // once the party has paid to open that room.
+        List<BoardTile> required = tiles.stream()
+            .filter(t -> !t.isOptional() && !t.isCompleted())
+            .collect(Collectors.toList());
+        if (!required.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\uD83D\uDDDD Must drop (" + required.size() + ")", COLOR_CURRENT));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : required) {
+                tilesPanel.add(createTileRow(tile, false, null));
+            }
+            tilesPanel.add(Box.createVerticalStrut(8));
+        }
+
+        List<BoardTile> bonus = tiles.stream()
+            .filter(BoardTile::isOptional)
+            .collect(Collectors.toList());
+        if (!bonus.isEmpty()) {
+            tilesPanel.add(createSectionHeader("\u2728 Bonus if you get lucky (" + bonus.size() + ")", COLOR_FREE));
+            tilesPanel.add(Box.createVerticalStrut(2));
+            tilesPanel.add(createDelveNote("Not required, not assigned \u2014 the plugin submits these automatically."));
+            tilesPanel.add(Box.createVerticalStrut(4));
+            for (BoardTile tile : bonus) {
+                tilesPanel.add(createDelveBonusRow(tile));
+            }
+        }
+    }
+
+    private JPanel createDelveBossRow(BoardData.DelveBoss boss) {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        row.setBorder(new EmptyBorder(4, 8, 4, 8));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+
+        JLabel nameLabel = new JLabel(boss.getName());
+        nameLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        nameLabel.setFont(nameLabel.getFont().deriveFont(11f));
+        row.add(nameLabel, BorderLayout.WEST);
+
+        String right = boss.getRate() + "/kill";
+        if (boss.getKills() > 0) right = boss.getKills() + " \u00D7 " + right;
+        JLabel rateLabel = new JLabel(right);
+        rateLabel.setForeground(boss.getKills() > 0 ? COLOR_COMPLETED : tierColor(boss.getTier()));
+        rateLabel.setFont(rateLabel.getFont().deriveFont(10f));
+        rateLabel.setToolTipText(boss.getKills() > 0
+            ? boss.getKills() + " kills banked, worth " + (boss.getKills() * boss.getRate()) + " supplies"
+            : "Worth " + boss.getRate() + " supplies per kill");
+        row.add(rateLabel, BorderLayout.EAST);
+
+        return row;
+    }
+
+    private JPanel createDelveBonusRow(BoardTile tile) {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        row.setBorder(new EmptyBorder(4, 8, 4, 8));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+
+        JLabel nameLabel = new JLabel(tile.getName());
+        nameLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        nameLabel.setFont(nameLabel.getFont().deriveFont(11f));
+        row.add(nameLabel, BorderLayout.WEST);
+
+        if (tile.getTier() != null && !tile.getTier().isEmpty()) {
+            JLabel tierLabel = new JLabel(tile.getTier());
+            tierLabel.setForeground(new Color(150, 150, 180));
+            tierLabel.setFont(tierLabel.getFont().deriveFont(10f));
+            row.add(tierLabel, BorderLayout.EAST);
+        }
+
+        return row;
+    }
+
+    private JPanel createDelveNote(String text) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        panel.setBorder(new EmptyBorder(0, 8, 2, 8));
+        // Swing has no text wrapping on JLabel; HTML with a width gives us one.
+        JLabel label = new JLabel("<html><body style='width:" + (PANEL_WIDTH - 40) + "px'>" + text + "</body></html>");
+        label.setForeground(new Color(130, 130, 150));
+        label.setFont(label.getFont().deriveFont(9f));
+        panel.add(label, BorderLayout.WEST);
+        return panel;
+    }
+
+    private Color tierColor(String tier) {
+        if ("hard".equals(tier)) return new Color(226, 120, 120);
+        if ("easy".equals(tier)) return new Color(140, 190, 140);
+        return new Color(220, 180, 60);
+    }
+
     // ===== UI HELPERS =====
 
     private JPanel createSectionHeader(String text, Color color) {
@@ -1037,6 +1210,7 @@ public class BirdhousePanel extends PluginPanel {
             case "chipdrop": return "Chip Drop";
             case "battleship": return "Battleship";
             case "monopoly": return "Boss Tycoon";
+            case "delve": return "The Delve";
             default: return gameType;
         }
     }

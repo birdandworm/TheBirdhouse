@@ -32,6 +32,9 @@ public class BoardData {
     // Battleship: attack/defense data
     private BattleshipMeta battleshipMeta;
 
+    // The Delve: spendable supplies, descent progress, and which bosses pay what
+    private DelveMeta delveMeta;
+
     @Data
     public static class OpponentPosition {
         private String name;
@@ -68,6 +71,32 @@ public class BoardData {
         private String turn;
         private String myTeam;
         private String enemyTeam;
+    }
+
+    /**
+     * The Delve runs on supplies, which are earned by killing bosses and spent opening
+     * rooms. The panel needs the spendable total and the per-boss rates, because "which
+     * boss should I kill and what is it worth" is the only in-game decision the mode has.
+     */
+    @Data
+    public static class DelveMeta {
+        private int supplies;
+        private int fromKills;
+        private int bonusEarned;
+        private int spent;
+        private int sigilsHeld;
+        private int sigilsNeeded;
+        private int roomsOpened;
+        private boolean vaultCleared;
+        private List<DelveBoss> bosses;
+    }
+
+    @Data
+    public static class DelveBoss {
+        private String name;
+        private String tier;  // easy | mid | hard
+        private int rate;     // supplies per kill
+        private int kills;    // banked so far for this party
     }
 
     @Data
