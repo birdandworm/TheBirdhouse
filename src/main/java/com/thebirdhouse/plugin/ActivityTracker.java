@@ -1,7 +1,9 @@
 package com.thebirdhouse.plugin;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
 import net.runelite.client.eventbus.Subscribe;
@@ -13,12 +15,15 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Accumulates leaderboard activity locally and flushes a compact delta on each
  * session heartbeat + logout. Tracks:
  *   - active time: only game ticks where XP or a kill happened recently (anti-AFK),
- *   - NPC kills: one per NPC loot event, tallied per monster,
+ *   - NPC kills: one per NPC loot event, tallied per monster, except for the handful of
+ *     sources that pay out on failure (see KC_CONFIRMED_SOURCES),
  *   - loot GP: GE value of every drop, no minimum.
  *
  * Every flush is a DELTA — the server folds it into a running per-room total — so
@@ -33,6 +38,35 @@ public class ActivityTracker {
     private static final long ACTIVE_IDLE_MS = 60_000;
     // Clamp a single tick's contribution so a paused/laggy client can't over-count.
     private static final long MAX_TICK_MS = 1_200;
+
+    /**
+     * Sources whose loot is NOT proof of a kill, keyed by the name the game announces in
+     * the killcount message to the name the loot event arrives under.
+     *
+     * The Gauntlet hands you a consolation chest when you die, and RuneLite books that
+     * chest against whichever boss you last fought — so a failed run looks exactly like a
+     * completed one to a loot listener. That matters well beyond the leaderboard now that
+     * The Delve pays supplies per kill: a death was earning the full Hunllef rate.
+     *
+     * These are credited from the game's own completion count instead, which only ever
+     * fires on a win. Note the two names genuinely differ: the Gauntlet reports a
+     * completion count for the minigame while the loot is booked against the boss.
+     */
+    private static final Map<String, String> KC_CONFIRMED_SOURCES = Map.of(
+        "Corrupted Gauntlet", "Corrupted Hunllef",
+        "Gauntlet", "Crystalline Hunllef"
+    );
+
+    // Mirrors RuneLite's own ChatCommandsPlugin killcount pattern, which has absorbed
+    // years of per-boss phrasing quirks ("subdued", "completion count for", raid
+    // "completed" counts). The trailing colour tag is optional only so the pattern stays
+    // testable against plain strings.
+    private static final Pattern KILLCOUNT_PATTERN = Pattern.compile(
+        "Your (?:completion count for |subdued |completed )?(?:<col=[0-9a-f]{6}>)?"
+            + "(?<boss>.+?)(?:</col>)? "
+            + "(?:(?:kill|harvest|lap|completion|success) )?(?:count )?"
+            + "is: ?(?:<col=[0-9a-f]{6}>)?(?<kc>[0-9,]+)"
+    );
 
     @Inject
     private Client client;
@@ -128,16 +162,42 @@ public class ActivityTracker {
             if (stackVal > topStack) topStack = stackVal;
         }
 
+        // The GP is real whether or not the run was won, so it is banked either way; only
+        // the kill waits for confirmation from the killcount message.
+        boolean awaitKillcount = source != null && KC_CONFIRMED_SOURCES.containsValue(source);
+
         synchronized (this) {
-            killsAccum += 1;
             lootGpAccum += eventValue;
-            if (source != null && !source.isEmpty()) {
-                npcKills.merge(source, 1, Integer::sum);
+            if (!awaitKillcount) {
+                killsAccum += 1;
+                if (source != null && !source.isEmpty()) {
+                    npcKills.merge(source, 1, Integer::sum);
+                }
             }
             if (topStack > biggestDrop) {
                 biggestDrop = topStack;
                 biggestSource = source;
             }
+        }
+    }
+
+    @Subscribe
+    public void onChatMessage(ChatMessage event) {
+        if (!config.contributeActivityStats()) return;
+        if (event.getType() != ChatMessageType.GAMEMESSAGE && event.getType() != ChatMessageType.SPAM) return;
+
+        Matcher matcher = KILLCOUNT_PATTERN.matcher(event.getMessage());
+        if (!matcher.find()) return;
+
+        // Only the sources held back in onLootReceived are credited here. Every other boss
+        // was already counted from its loot, and counting it again would double it.
+        String source = KC_CONFIRMED_SOURCES.get(matcher.group("boss"));
+        if (source == null) return;
+
+        markActive();
+        synchronized (this) {
+            killsAccum += 1;
+            npcKills.merge(source, 1, Integer::sum);
         }
     }
 
