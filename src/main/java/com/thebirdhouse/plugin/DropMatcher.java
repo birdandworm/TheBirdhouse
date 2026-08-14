@@ -117,7 +117,7 @@ public class DropMatcher {
                     log.info("[Birdhouse]   Event not started — not submitting '{}', warning player to screenshot", itemName);
                     warnNotStarted(match, itemName);
                 } else {
-                    submitMatch(match, sourceName, itemName, quantity);
+                    submitMatch(match, sourceName, itemName, quantity, itemStack.getId());
                 }
             }
         }
@@ -253,7 +253,7 @@ public class DropMatcher {
         overlay.setLastMatch(match.getTileName() + " (not started \u2014 screenshot!)", itemName);
     }
 
-    private void submitMatch(TileMatch match, String npcName, String itemName, int quantity) {
+    private void submitMatch(TileMatch match, String npcName, String itemName, int quantity, int itemId) {
         String playerName = client.getLocalPlayer().getName();
 
         ProofPayload payload = new ProofPayload();
@@ -265,6 +265,8 @@ public class DropMatcher {
         payload.setItemName(itemName);
         payload.setNpcName(npcName);
         payload.setQuantity(quantity);
+        payload.setItemId(itemId);
+        payload.setValue(stackValue(itemId, quantity));
         payload.setTimestamp(System.currentTimeMillis());
 
         if (config.includeScreenshot()) {
@@ -280,6 +282,16 @@ public class DropMatcher {
         }
 
         log.info("Drop matched tile '{}': {} from {}", match.getTileName(), itemName, npcName);
+    }
+
+    /** Grand Exchange value of a whole stack; 0 for untradeables and unknown ids. */
+    private long stackValue(int itemId, int quantity) {
+        try {
+            int price = itemManager.getItemPrice(itemId);
+            return (long) Math.max(0, price) * Math.max(0, quantity);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private void doSubmit(ProofPayload payload, byte[] screenshot, TileMatch match, String itemName) {
