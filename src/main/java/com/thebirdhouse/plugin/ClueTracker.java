@@ -7,6 +7,7 @@ import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
@@ -80,7 +81,21 @@ public class ClueTracker {
         "^(?:scroll box|clue geode|clue bottle|clue nest) \\((" + TIERS + ")\\)$", Pattern.CASE_INSENSITIVE
     );
 
-    private static final Set<Skill> GATHERING = EnumSet.of(Skill.MINING, Skill.FISHING, Skill.WOODCUTTING);
+    /**
+     * Skills whose experience vouches for a container appearing out of nowhere.
+     *
+     * Sailing is here for clue turtles, an ocean encounter that hands over a clue directly
+     * and which the loot tracker knows nothing about. Shipwreck salvaging does not need it —
+     * the tracker has a handler for the "you sort through the ... salvage" message — but its
+     * loot lands in the inventory alongside Sailing experience all the same, so it would look
+     * identical here. The deferred check below is what stops that being counted twice.
+     *
+     * Hunter is deliberately absent. Catching an impling without a jar loots on the spot, and
+     * crediting that against Hunter experience would launder it past the impling gate.
+     */
+    private static final Set<Skill> GATHERING = EnumSet.of(
+        Skill.MINING, Skill.FISHING, Skill.WOODCUTTING, Skill.SAILING
+    );
 
     // Experience arrives on the same tick as the container, but a tick of slack costs
     // nothing and covers the odd ordering difference.
@@ -111,6 +126,10 @@ public class ClueTracker {
     private int lastLootTick = Integer.MIN_VALUE;
     private Set<String> lastLootItems = new HashSet<>();
 
+    private String pendingClue = null;
+    private Skill pendingSkill = null;
+    private int pendingTick = Integer.MIN_VALUE;
+
     public void reset() {
         lastInventory = new HashMap<>();
         awaitingCatch = false;
@@ -119,6 +138,9 @@ public class ClueTracker {
         lastTakeTick = Integer.MIN_VALUE;
         lastLootTick = Integer.MIN_VALUE;
         lastLootItems = new HashSet<>();
+        pendingClue = null;
+        pendingSkill = null;
+        pendingTick = Integer.MIN_VALUE;
     }
 
     private boolean inClueTrailRoom() {
@@ -201,21 +223,44 @@ public class ClueTracker {
         int tick = client.getTickCount();
         if (tick - lastGatherTick > GATHER_TICKS) {
             // No gathering experience just now, so this came from a bank, a trade, a reward
-            // interface or an item reclaim rather than from a rock, a fish or a tree.
+            // interface or an item reclaim rather than from a rock, a fish, a tree or the sea.
             return;
         }
         if (tick - lastTakeTick <= RECENT_TICKS) {
             log.debug("[Birdhouse] Ignoring '{}' picked up off the ground", gathered);
             return;
         }
-        if (tick - lastLootTick <= RECENT_TICKS && lastLootItems.contains(gathered.toLowerCase())) {
-            log.debug("[Birdhouse] '{}' already reported by the loot tracker", gathered);
+
+        // Held for a tick rather than submitted here. The loot tracker reports from this same
+        // inventory change, and the order two subscribers run in is not defined, so checking
+        // for a duplicate now would be a coin flip — which matters for shipwreck salvaging,
+        // where the tracker does report the clue and this would otherwise double it.
+        pendingClue = gathered;
+        pendingSkill = lastGatherSkill;
+        pendingTick = tick;
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick event) {
+        if (pendingClue == null) return;
+        int now = client.getTickCount();
+        if (now == pendingTick) return;
+
+        String clue = pendingClue;
+        Skill skill = pendingSkill;
+        int found = pendingTick;
+        pendingClue = null;
+        pendingSkill = null;
+
+        if (!inClueTrailRoom()) return;
+        if (lastLootTick >= found - RECENT_TICKS && lastLootItems.contains(clue.toLowerCase())) {
+            log.debug("[Birdhouse] '{}' already reported by the loot tracker", clue);
             return;
         }
 
-        String skill = lastGatherSkill == null ? "Skilling" : label(lastGatherSkill);
-        log.info("[Birdhouse] Clue from {}: {}", skill, gathered);
-        submitClue(skill, gathered, SKILLING_CONTAINER);
+        String source = skill == null ? "Skilling" : label(skill);
+        log.info("[Birdhouse] Clue from {}: {}", source, clue);
+        submitClue(source, clue, SKILLING_CONTAINER);
     }
 
     private static String label(Skill skill) {
