@@ -15,5 +15,9 @@ public class ProofPayload {
     private String itemName;
     private String npcName;
     private int quantity;
+    // Grand Exchange value of the whole stack. Sent because the backend has no price data
+    // of its own, and Clue Trail ranks players partly on the value of what they open.
+    private long value;
+    private int itemId;
     private long timestamp;
 }

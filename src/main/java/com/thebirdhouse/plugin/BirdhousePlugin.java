@@ -46,7 +46,7 @@ public class BirdhousePlugin extends Plugin {
     private ActivityTracker activityTracker;
 
     @Inject
-    private ImplingTracker implingTracker;
+    private ClueTracker clueTracker;
 
     @Inject
     private OverlayManager overlayManager;
@@ -75,7 +75,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.register(dropMatcher);
         eventBus.register(achievementTracker);
         eventBus.register(activityTracker);
-        eventBus.register(implingTracker);
+        eventBus.register(clueTracker);
 
         String token = config.authToken();
         if (token != null) {
@@ -119,7 +119,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.unregister(dropMatcher);
         eventBus.unregister(achievementTracker);
         eventBus.unregister(activityTracker);
-        eventBus.unregister(implingTracker);
+        eventBus.unregister(clueTracker);
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();
@@ -139,7 +139,7 @@ public class BirdhousePlugin extends Plugin {
             log.info("[Birdhouse] Login detected for '{}', token present: {}", playerName, token != null && !token.isEmpty());
 
             // The inventory diff is meaningless across a login, so start from a clean slate.
-            implingTracker.reset();
+            clueTracker.reset();
             loadBoard();
 
             if (config.trackActivity()) {
