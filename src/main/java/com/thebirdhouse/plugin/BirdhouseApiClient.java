@@ -199,6 +199,43 @@ public class BirdhouseApiClient {
     }
 
     /**
+     * Report an impling caught into a jar (Clue Trail).
+     *
+     * Sent as it happens rather than batched with the activity flush: the jar is usually
+     * opened within seconds, and the clue it yields is only credited if the catch is
+     * already on record.
+     */
+    public void reportImplingCatch(String roomCode, String impling, int count) {
+        if (authToken == null || authToken.isEmpty() || impling == null || impling.isEmpty()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                JsonObject body = new JsonObject();
+                if (roomCode != null && !roomCode.isEmpty()) {
+                    body.addProperty("roomCode", roomCode);
+                }
+                body.addProperty("impling", impling);
+                body.addProperty("count", Math.max(1, count));
+
+                Request request = new Request.Builder()
+                    .url(BASE_URL + "/impling-catch")
+                    .header("Authorization", "Bearer " + authToken)
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(body)))
+                    .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (!response.isSuccessful()) {
+                        log.debug("Impling catch report failed: {}", response.code());
+                    }
+                }
+            } catch (IOException e) {
+                log.debug("Failed to report impling catch", e);
+            }
+        });
+    }
+
+    /**
      * Fetch the player's active rooms for auto-detection.
      */
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
