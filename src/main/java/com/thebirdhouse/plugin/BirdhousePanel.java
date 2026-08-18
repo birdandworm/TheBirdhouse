@@ -179,7 +179,30 @@ public class BirdhousePanel extends PluginPanel {
         this.activeRoomCode = code;
     }
 
+    /** Shows a single status line with no board, for the states where there is nothing to draw. */
+    private void showIdleState(String message, Color color) {
+        statusLabel.setText(message);
+        statusLabel.setForeground(color);
+        progressLabel.setText("");
+        countdownLabel.setText("");
+        boardPanel.removeAll();
+        tilesPanel.removeAll();
+        boardPanel.revalidate();
+        tilesPanel.revalidate();
+    }
+
     public void refreshBoard() {
+        // Tested ahead of the room code, because a token is what makes any of this work:
+        // without one the server rejects every request, so a player who has pasted a room
+        // code but not a token would poll indefinitely and only ever see "Failed to load
+        // board". This panel is also the sole place that setup gap is visible to them.
+        String token = config.authToken();
+        if (token == null || token.trim().isEmpty()) {
+            showIdleState("\u26A0 No auth token — paste yours in settings", new Color(255, 120, 120));
+            scheduleNextRefresh(POLL_IDLE_SECONDS);
+            return;
+        }
+
         String roomCode = config.roomCode();
         if (roomCode != null) {
             roomCode = roomCode.trim();
@@ -191,20 +214,7 @@ public class BirdhousePanel extends PluginPanel {
         }
 
         if (roomCode == null || roomCode.isEmpty()) {
-            String token = config.authToken();
-            if (token == null || token.trim().isEmpty()) {
-                statusLabel.setText("\u26A0 No auth token configured");
-                statusLabel.setForeground(new Color(255, 120, 120));
-            } else {
-                statusLabel.setText("\u26A0 No active room found");
-                statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            }
-            progressLabel.setText("");
-            countdownLabel.setText("");
-            boardPanel.removeAll();
-            tilesPanel.removeAll();
-            boardPanel.revalidate();
-            tilesPanel.revalidate();
+            showIdleState("\u26A0 No active room found", ColorScheme.LIGHT_GRAY_COLOR);
             // No room to track — idle until login/config change or a manual refresh.
             scheduleNextRefresh(POLL_IDLE_SECONDS);
             return;
