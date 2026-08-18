@@ -61,6 +61,23 @@ public class DropMatcher {
         return activeRoomCode;
     }
 
+    /**
+     * Whether the tracked event has finished (deadline passed or host closed it).
+     *
+     * A room code lives in plugin config, so it outlives the event: once a bingo ends,
+     * nothing clears it and every later kill would otherwise still be matched, uploaded
+     * with a screenshot, and rejected by the server. That is pure waste which persists
+     * for as long as the player leaves the plugin installed, so the submitting paths all
+     * gate on this.
+     *
+     * Absent flag means live: an older server omits it, and going quiet against one
+     * would break submission entirely rather than merely waste a request.
+     */
+    public boolean isEventOver() {
+        BoardData board = activeBoard;
+        return board != null && Boolean.FALSE.equals(board.getActive());
+    }
+
     public void loadActiveBoard(String roomCode) {
         if (roomCode == null || roomCode.isEmpty()) {
             log.warn("[Birdhouse] loadActiveBoard called with empty roomCode");
@@ -90,6 +107,10 @@ public class DropMatcher {
         }
         if (activeBoard == null) {
             log.info("[Birdhouse] No active board loaded, skipping loot event");
+            return;
+        }
+        if (isEventOver()) {
+            log.debug("[Birdhouse] Event {} has ended, not matching drops", activeRoomCode);
             return;
         }
 

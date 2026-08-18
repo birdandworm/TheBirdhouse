@@ -80,6 +80,9 @@ public class ActivityTracker {
     @Inject
     private BirdhouseApiClient apiClient;
 
+    @Inject
+    private DropMatcher dropMatcher;
+
     private volatile String activeRoomCode;
 
     // Accumulators (guarded by 'this').
@@ -100,6 +103,12 @@ public class ActivityTracker {
 
     /** Clears all local state — used when a new session starts. */
     public void reset() {
+        clearAccumulators();
+        lastActivityMs = 0;
+        lastTickMs = 0;
+    }
+
+    private void clearAccumulators() {
         synchronized (this) {
             activeMsAccum = 0;
             lootGpAccum = 0;
@@ -108,8 +117,6 @@ public class ActivityTracker {
             biggestSource = null;
             npcKills.clear();
         }
-        lastActivityMs = 0;
-        lastTickMs = 0;
     }
 
     private void markActive() {
@@ -208,6 +215,15 @@ public class ActivityTracker {
     public void flush() {
         if (!config.contributeActivityStats()) {
             reset();
+            return;
+        }
+
+        // Once the event is over the server discards the delta, so sending it buys nothing
+        // and would repeat every flush interval for as long as the plugin stays installed.
+        // The accumulators are dropped rather than held: keeping them would bank hours of
+        // unrelated play and dump the lot into whichever event the player joins next.
+        if (dropMatcher.isEventOver()) {
+            clearAccumulators();
             return;
         }
 

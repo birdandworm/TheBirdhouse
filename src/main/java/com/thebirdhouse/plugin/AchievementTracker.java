@@ -52,9 +52,23 @@ public class AchievementTracker {
         this.activeBoard = board;
     }
 
+    /**
+     * Whether there is a live event to submit against. Collection-log entries, quests and
+     * pets keep arriving long after a bingo ends, and the configured room code outlives
+     * the event, so without this every one of them would be uploaded and rejected for as
+     * long as the plugin stays installed. Absent flags mean live, to stay compatible with
+     * a server that predates them.
+     */
+    private boolean eventLive() {
+        BoardData board = activeBoard;
+        if (board == null) return false;
+        return !Boolean.FALSE.equals(board.getActive())
+            && !Boolean.FALSE.equals(board.getStarted());
+    }
+
     @Subscribe
     public void onChatMessage(ChatMessage event) {
-        if (!config.autoSubmitDrops() || activeBoard == null) return;
+        if (!config.autoSubmitDrops() || !eventLive()) return;
 
         String message = event.getMessage();
         if (message == null) return;
@@ -87,7 +101,7 @@ public class AchievementTracker {
 
     @Subscribe
     public void onStatChanged(StatChanged event) {
-        if (!config.autoSubmitDrops() || activeBoard == null) return;
+        if (!config.autoSubmitDrops() || !eventLive()) return;
 
         int level = event.getLevel();
         String skillName = event.getSkill().getName();

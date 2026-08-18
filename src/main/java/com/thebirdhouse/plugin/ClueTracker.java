@@ -146,7 +146,8 @@ public class ClueTracker {
     private boolean inClueTrailRoom() {
         BoardData board = dropMatcher.getActiveBoard();
         return board != null && SPIRE_GAME_TYPE.equals(board.getGameType())
-            && !Boolean.FALSE.equals(board.getStarted());
+            && !Boolean.FALSE.equals(board.getStarted())
+            && !dropMatcher.isEventOver();
     }
 
     @Subscribe
