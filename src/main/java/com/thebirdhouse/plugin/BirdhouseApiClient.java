@@ -43,6 +43,17 @@ public class BirdhouseApiClient {
     }
 
     /**
+     * Whether a usable token is configured. The server trims the bearer value before
+     * looking it up, so a whitespace-only token is rejected there exactly as an empty
+     * one is; treating both as absent here keeps us from firing a request that cannot
+     * succeed. A fresh install has no token until the player pastes one, and the
+     * timer-driven reporters would otherwise call on regardless.
+     */
+    private boolean hasAuthToken() {
+        return authToken != null && !authToken.trim().isEmpty();
+    }
+
+    /**
      * Submit a drop proof to The Birdhouse.
      */
     public CompletableFuture<Boolean> submitProof(ProofPayload payload, byte[] screenshot) {
@@ -151,6 +162,9 @@ public class BirdhouseApiClient {
      * Report a session event (login/logout/heartbeat).
      */
     public void reportSession(SessionEvent event) {
+        if (!hasAuthToken()) {
+            return;
+        }
         CompletableFuture.runAsync(() -> {
             try {
                 Request request = new Request.Builder()
@@ -176,7 +190,7 @@ public class BirdhouseApiClient {
      * failures so a hiccup can't disrupt gameplay (the next flush re-sends).
      */
     public void reportActivity(ActivityPayload payload) {
-        if (authToken == null || authToken.isEmpty()) {
+        if (!hasAuthToken()) {
             return;
         }
         CompletableFuture.runAsync(() -> {
@@ -206,7 +220,7 @@ public class BirdhouseApiClient {
      * already on record.
      */
     public void reportImplingCatch(String roomCode, String impling, int count) {
-        if (authToken == null || authToken.isEmpty() || impling == null || impling.isEmpty()) {
+        if (!hasAuthToken() || impling == null || impling.isEmpty()) {
             return;
         }
         CompletableFuture.runAsync(() -> {
@@ -240,7 +254,7 @@ public class BirdhouseApiClient {
      */
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
         return CompletableFuture.supplyAsync(() -> {
-            if (authToken == null || authToken.isEmpty()) {
+            if (!hasAuthToken()) {
                 log.warn("[Birdhouse] Cannot fetch active rooms — no auth token configured");
                 return java.util.Collections.<ActiveRoom>emptyList();
             }
