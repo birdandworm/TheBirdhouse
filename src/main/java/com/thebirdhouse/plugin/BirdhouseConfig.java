@@ -117,4 +117,33 @@ public interface BirdhouseConfig extends Config {
     default boolean contributeActivityStats() {
         return true;
     }
+
+    @ConfigSection(
+        name = "Clan Leaderboard",
+        description = "Report drops to your clan's Discord leaderboard via The Birdhouse (replaces Dink for clan tracking)",
+        position = 3
+    )
+    String clanSection = "clan";
+
+    @ConfigItem(
+        keyName = "contributeClanStats",
+        name = "Enable Clan Reporting",
+        description = "Send loot and collection log data to your clan's leaderboard. This is separate from the bingo game — it feeds the Discord drop tracker.",
+        section = clanSection,
+        position = 0
+    )
+    default boolean contributeClanStats() {
+        return false;
+    }
+
+    @ConfigItem(
+        keyName = "clanId",
+        name = "Clan ID",
+        description = "Your clan's identifier (e.g. 'birdhouse'). Ask your clan leader if you're unsure.",
+        section = clanSection,
+        position = 1
+    )
+    default String clanId() {
+        return "";
+    }
 }

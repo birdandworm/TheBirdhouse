@@ -49,6 +49,9 @@ public class BirdhousePlugin extends Plugin {
     private ClueTracker clueTracker;
 
     @Inject
+    private ClanLootReporter clanLootReporter;
+
+    @Inject
     private OverlayManager overlayManager;
 
     @Inject
@@ -76,6 +79,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.register(achievementTracker);
         eventBus.register(activityTracker);
         eventBus.register(clueTracker);
+        eventBus.register(clanLootReporter);
 
         String token = config.authToken();
         if (token != null) {
@@ -120,6 +124,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.unregister(achievementTracker);
         eventBus.unregister(activityTracker);
         eventBus.unregister(clueTracker);
+        eventBus.unregister(clanLootReporter);
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();

@@ -250,6 +250,34 @@ public class BirdhouseApiClient {
     }
 
     /**
+     * Report a loot drop, clue completion, or collection-log entry to the clan
+     * leaderboard. Fire-and-forget: failures are silently swallowed so they can
+     * never disrupt gameplay or the bingo submission path.
+     */
+    public void reportClanLoot(JsonObject payload) {
+        if (!hasAuthToken()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                Request request = new Request.Builder()
+                    .url(BASE_URL + "/clan-loot")
+                    .header("Authorization", "Bearer " + authToken)
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(payload)))
+                    .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (!response.isSuccessful()) {
+                        log.debug("Clan loot report failed: {}", response.code());
+                    }
+                }
+            } catch (IOException e) {
+                log.debug("Failed to report clan loot", e);
+            }
+        });
+    }
+
+    /**
      * Fetch the player's active rooms for auto-detection.
      */
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
