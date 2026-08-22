@@ -88,6 +88,7 @@ public class ClanLootReporter {
         JsonObject payload = new JsonObject();
         payload.addProperty("type", "LOOT");
         payload.addProperty("clanId", clanId());
+        payload.addProperty("playerName", client.getLocalPlayer().getName());
         payload.add("items", items);
         payload.addProperty("source", source);
         payload.addProperty("totalValue", totalValue);
@@ -113,6 +114,7 @@ public class ClanLootReporter {
             JsonObject payload = new JsonObject();
             payload.addProperty("type", "COLLECTION");
             payload.addProperty("clanId", clanId());
+            payload.addProperty("playerName", client.getLocalPlayer().getName());
             payload.addProperty("itemName", itemName);
 
             apiClient.reportClanLoot(payload);
@@ -127,6 +129,7 @@ public class ClanLootReporter {
             JsonObject payload = new JsonObject();
             payload.addProperty("type", "CLUE");
             payload.addProperty("clanId", clanId());
+            payload.addProperty("playerName", client.getLocalPlayer().getName());
             payload.addProperty("clueType", clueType);
             payload.addProperty("source", "Clue scroll (" + clueType + ")");
             payload.add("items", new JsonArray());

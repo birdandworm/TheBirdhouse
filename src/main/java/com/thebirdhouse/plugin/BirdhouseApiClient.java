@@ -255,16 +255,15 @@ public class BirdhouseApiClient {
      * never disrupt gameplay or the bingo submission path.
      */
     public void reportClanLoot(JsonObject payload) {
-        if (!hasAuthToken()) {
-            return;
-        }
         CompletableFuture.runAsync(() -> {
             try {
-                Request request = new Request.Builder()
+                Request.Builder rb = new Request.Builder()
                     .url(BASE_URL + "/clan-loot")
-                    .header("Authorization", "Bearer " + authToken)
-                    .post(RequestBody.create(JSON_TYPE, gson.toJson(payload)))
-                    .build();
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(payload)));
+                if (hasAuthToken()) {
+                    rb.header("Authorization", "Bearer " + authToken);
+                }
+                Request request = rb.build();
 
                 try (Response response = httpClient.newCall(request).execute()) {
                     if (!response.isSuccessful()) {
