@@ -30,6 +30,8 @@ import java.util.regex.Pattern;
 @Singleton
 public class ClanLootReporter {
 
+    private static final long MIN_LOOT_VALUE = 100_000;
+
     private static final Pattern COLLECTION_LOG_PATTERN =
         Pattern.compile("New item added to your collection log: (.+)");
 
@@ -84,6 +86,8 @@ public class ClanLootReporter {
             item.addProperty("priceEach", Math.max(0, price));
             items.add(item);
         }
+
+        if (totalValue < MIN_LOOT_VALUE) return;
 
         JsonObject payload = new JsonObject();
         payload.addProperty("type", "LOOT");
