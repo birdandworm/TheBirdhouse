@@ -44,6 +44,18 @@ Get a chat message when your proof is submitted and processed.
 | Chat Notification | On | Show game chat message on submission |
 | Show Overlay | On | Display tile progress on game screen |
 | Track Play Sessions | On | Report session time to The Birdhouse |
+| Enable Clan Reporting | Off | Send drops to your clan's Discord leaderboard |
+| Clan ID | (empty) | Your clan identifier (e.g. `birdhouse`) |
+
+### Clan Leaderboard (replaces Dink)
+Feed your clan's Discord drop tracker directly from the Birdhouse plugin — no Dink required. Loot, clue completions, and collection log entries are sent to the same Firestore collections your clan bot already reads.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Enable Clan Reporting | Off | Send drops to your clan's leaderboard |
+| Clan ID | (empty) | Your clan identifier, e.g. `birdhouse` |
+
+**Migrating from Dink:** Enable *Clan Reporting* and enter your Clan ID in the plugin settings. Once your first event is sent through the plugin, the server automatically marks you as migrated and stops accepting Dink events for you — no double-counting. You can then remove the Dink dynamic config URL from your Dink settings whenever you like.
 
 ## Supported Game Modes
 
