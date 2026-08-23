@@ -63,8 +63,7 @@ public class ClanLootReporter {
     @Subscribe
     public void onLootReceived(LootReceived event) {
         if (!isEnabled()) return;
-        String lootType = String.valueOf(event.getType());
-        if (!"NPC".equals(lootType) && !"EVENT".equals(lootType)) return;
+        if ("PLAYER".equals(String.valueOf(event.getType()))) return;
 
         String source = event.getName();
         JsonArray items = new JsonArray();
