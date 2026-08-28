@@ -11,6 +11,9 @@ public class ProofPayload {
     private String playerName;
     private String tileKey;
     private String tileName;
+    // Territory War proofs are reviewed by territory, not by the drop that took it, so the
+    // backend stores this alongside the tile name for the approval screen.
+    private String territoryName;
     private String gameType;
     private String itemName;
     private String npcName;
@@ -20,4 +23,8 @@ public class ProofPayload {
     private long value;
     private int itemId;
     private long timestamp;
+    // True only for proofs the player submitted by hand from the board window. The backend
+    // routes these to admin review instead of auto-approving them, because nothing
+    // witnessed the drop.
+    private boolean manual;
 }

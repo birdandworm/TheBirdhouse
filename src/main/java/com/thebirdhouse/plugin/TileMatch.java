@@ -12,4 +12,6 @@ public class TileMatch {
     private String tileKey;
     private String tileName;
     private String gameType;
+    /** Territory War only; null for every other mode. */
+    private String territoryName;
 }
