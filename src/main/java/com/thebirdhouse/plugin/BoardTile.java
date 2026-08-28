@@ -27,6 +27,13 @@ public class BoardTile {
     private boolean optional;
     private String tier;
 
+    // Bounty Board: what a bounty pays, when its window shuts, and how many teams have
+    // already claimed it. The first claim takes full points and later ones a fraction, so
+    // claimsSoFar is what decides whether a bounty is still worth chasing.
+    private int points;
+    private Long closesAt;
+    private int claimsSoFar;
+
     // "Collect all" (AND) tiles: require every slot in matchGroups to be filled.
     private boolean matchAll;
     private List<String> requiredItems;

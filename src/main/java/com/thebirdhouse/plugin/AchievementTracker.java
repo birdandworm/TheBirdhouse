@@ -184,8 +184,8 @@ public class AchievementTracker {
 
         if (config.includeScreenshot()) {
             screenshotHelper.captureAsync(screenshot -> {
-                apiClient.submitProof(payload, screenshot).thenAccept(success -> {
-                    if (success && config.notifyOnSubmit()) {
+                apiClient.submitProof(payload, screenshot).thenAccept(result -> {
+                    if (result.isOk() && !result.isDuplicate() && config.notifyOnSubmit()) {
                         client.addChatMessage(
                             ChatMessageType.GAMEMESSAGE,
                             "",
@@ -196,8 +196,8 @@ public class AchievementTracker {
                 });
             });
         } else {
-            apiClient.submitProof(payload, null).thenAccept(success -> {
-                if (success && config.notifyOnSubmit()) {
+            apiClient.submitProof(payload, null).thenAccept(result -> {
+                if (result.isOk() && !result.isDuplicate() && config.notifyOnSubmit()) {
                     client.addChatMessage(
                         ChatMessageType.GAMEMESSAGE,
                         "",

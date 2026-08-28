@@ -56,7 +56,7 @@ public class BirdhouseApiClient {
     /**
      * Submit a drop proof to The Birdhouse.
      */
-    public CompletableFuture<Boolean> submitProof(ProofPayload payload, byte[] screenshot) {
+    public CompletableFuture<ProofResult> submitProof(ProofPayload payload, byte[] screenshot) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 MultipartBody.Builder builder = new MultipartBody.Builder()
@@ -75,19 +75,60 @@ public class BirdhouseApiClient {
                     .build();
 
                 try (Response response = httpClient.newCall(request).execute()) {
-                    if (response.isSuccessful()) {
+                    String body = response.body() != null ? response.body().string() : "";
+                    ProofResult result = interpretProofResponse(response.code(), body);
+                    if (result.isOk()) {
                         log.info("Proof submitted successfully for tile: {}", payload.getTileName());
-                        return true;
                     } else {
-                        log.warn("Proof submission failed: {} {}", response.code(), response.message());
-                        return false;
+                        log.warn("Proof submission failed for tile {}: {} ({})",
+                            payload.getTileName(), result.getMessage(), response.code());
                     }
+                    return result;
                 }
             } catch (IOException e) {
                 log.error("Failed to submit proof", e);
-                return false;
+                return ProofResult.rejected("Couldn't reach The Birdhouse");
             }
         });
+    }
+
+    /**
+     * A refused proof still comes back as HTTP 200 with {@code success:false} and a
+     * reason, because the request itself was well-formed — the drop just didn't qualify.
+     * Treating any 2xx as acceptance would tell a player their manual submission landed
+     * when the server actually threw it away.
+     */
+    private ProofResult interpretProofResponse(int code, String body) {
+        JsonObject json = null;
+        try {
+            if (body != null && !body.isEmpty()) {
+                json = gson.fromJson(body, JsonObject.class);
+            }
+        } catch (RuntimeException e) {
+            log.debug("Unparseable submit-proof body: {}", e.getMessage());
+        }
+
+        String reason = null;
+        if (json != null) {
+            if (json.has("reason")) {
+                reason = json.get("reason").getAsString();
+            } else if (json.has("error")) {
+                reason = json.get("error").getAsString();
+            } else if (json.has("message")) {
+                reason = json.get("message").getAsString();
+            }
+        }
+
+        if (code < 200 || code >= 300) {
+            return ProofResult.rejected(reason != null ? reason : "Server returned " + code);
+        }
+        if (json != null && json.has("duplicate") && json.get("duplicate").getAsBoolean()) {
+            return ProofResult.duplicate(reason != null ? reason : "Already submitted");
+        }
+        if (json != null && json.has("success") && !json.get("success").getAsBoolean()) {
+            return ProofResult.rejected(reason != null ? reason : "The server rejected this proof");
+        }
+        return ProofResult.accepted();
     }
 
     /**

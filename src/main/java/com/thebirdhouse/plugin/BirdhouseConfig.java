@@ -79,9 +79,38 @@ public interface BirdhouseConfig extends Config {
     }
 
     @ConfigSection(
+        name = "Board Window",
+        description = "The pop-out board window (the sidebar is capped at 225px by RuneLite)",
+        position = 2
+    )
+    String boardWindowSection = "boardWindow";
+
+    @ConfigItem(
+        keyName = "openBoardWindowOnStart",
+        name = "Open On Login",
+        description = "Open the pop-out board window automatically when the plugin starts",
+        section = boardWindowSection,
+        position = 0
+    )
+    default boolean openBoardWindowOnStart() {
+        return false;
+    }
+
+    @ConfigItem(
+        keyName = "boardWindowAlwaysOnTop",
+        name = "Always On Top",
+        description = "Keep the board window above other windows. Also toggled by the window's Pin button.",
+        section = boardWindowSection,
+        position = 1
+    )
+    default boolean boardWindowAlwaysOnTop() {
+        return false;
+    }
+
+    @ConfigSection(
         name = "Activity Tracking",
         description = "Session and playtime tracking",
-        position = 2
+        position = 3
     )
     String activitySection = "activity";
 
@@ -121,7 +150,7 @@ public interface BirdhouseConfig extends Config {
     @ConfigSection(
         name = "Clan Leaderboard",
         description = "Report drops to your clan's Discord leaderboard via The Birdhouse (replaces Dink for clan tracking)",
-        position = 3
+        position = 4
     )
     String clanSection = "clan";
 

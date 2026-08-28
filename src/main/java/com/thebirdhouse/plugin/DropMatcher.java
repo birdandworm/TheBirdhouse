@@ -167,7 +167,7 @@ public class DropMatcher {
             if ("chipdrop".equals(tile.getGameType()) && !tile.isAvailable()) continue;
 
             if (matchesTile(tile, npcName, itemName)) {
-                matches.add(new TileMatch(tile.getKey(), tile.getName(), tile.getGameType()));
+                matches.add(new TileMatch(tile.getKey(), tile.getName(), tile.getGameType(), tile.getTerritoryName()));
             }
         }
         return matches;
@@ -282,6 +282,7 @@ public class DropMatcher {
         payload.setPlayerName(playerName);
         payload.setTileKey(match.getTileKey());
         payload.setTileName(match.getTileName());
+        payload.setTerritoryName(match.getTerritoryName());
         payload.setGameType(match.getGameType());
         payload.setItemName(itemName);
         payload.setNpcName(npcName);
@@ -317,10 +318,10 @@ public class DropMatcher {
 
     private void doSubmit(ProofPayload payload, byte[] screenshot, TileMatch match, String itemName) {
         log.info("[Birdhouse] Submitting proof: tile='{}', item='{}', screenshot={} bytes", match.getTileName(), itemName, screenshot != null ? screenshot.length : 0);
-        apiClient.submitProof(payload, screenshot).thenAccept(success -> {
-            if (success) {
+        apiClient.submitProof(payload, screenshot).thenAccept(result -> {
+            if (result.isOk()) {
                 log.info("[Birdhouse] Proof submitted successfully for '{}'", match.getTileName());
-                if (config.notifyOnSubmit()) {
+                if (config.notifyOnSubmit() && !result.isDuplicate()) {
                     client.addChatMessage(
                         net.runelite.api.ChatMessageType.GAMEMESSAGE,
                         "",
@@ -330,7 +331,7 @@ public class DropMatcher {
                 }
                 overlay.setLastMatch(match.getTileName(), itemName);
             } else {
-                log.warn("[Birdhouse] Proof submission FAILED for '{}'", match.getTileName());
+                log.warn("[Birdhouse] Proof submission FAILED for '{}': {}", match.getTileName(), result.getMessage());
             }
         });
     }
