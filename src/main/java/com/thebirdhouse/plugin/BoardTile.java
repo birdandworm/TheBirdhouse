@@ -21,6 +21,12 @@ public class BoardTile {
     private int quantity;
     private int currentQty;
 
+    // Set by the host in the site's tile editor, and only sent when non-empty: the
+    // picture shown on the tile, and a short note ("solo only, no alts") that is a rule
+    // rather than a hint, so it belongs anywhere the tile is shown.
+    private String image;
+    private String description;
+
     // The Delve: bonus-supply drops are repeatable and are never required, so they must
     // not be rendered as a "remaining" checklist the clan is expected to clear.
     private boolean repeatable;

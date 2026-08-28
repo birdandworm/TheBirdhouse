@@ -33,6 +33,7 @@ public class BirdhousePanel extends PluginPanel {
     private final ConfigManager configManager;
     private final Client client;
     private final ClientThread clientThread;
+    private final TileIcons tileIcons;
 
     private final JPanel boardPanel;
     private final JPanel tilesPanel;
@@ -57,7 +58,7 @@ public class BirdhousePanel extends PluginPanel {
     @Inject
     public BirdhousePanel(BirdhouseConfig config, DropMatcher dropMatcher, BirdhouseApiClient apiClient,
                           ScreenshotHelper screenshotHelper, ConfigManager configManager,
-                          Client client, ClientThread clientThread) {
+                          Client client, ClientThread clientThread, TileIcons tileIcons) {
         super(false);
         this.config = config;
         this.dropMatcher = dropMatcher;
@@ -66,6 +67,7 @@ public class BirdhousePanel extends PluginPanel {
         this.configManager = configManager;
         this.client = client;
         this.clientThread = clientThread;
+        this.tileIcons = tileIcons;
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -196,6 +198,7 @@ public class BirdhousePanel extends PluginPanel {
             scheduler.shutdownNow();
             scheduler = null;
         }
+        tileIcons.clear();
         SwingUtilities.invokeLater(() -> {
             if (boardWindow != null) {
                 boardWindow.dispose();
@@ -214,7 +217,7 @@ public class BirdhousePanel extends PluginPanel {
     public void openBoardWindow() {
         if (boardWindow == null || !boardWindow.isDisplayable()) {
             boardWindow = new BirdhouseBoardWindow(apiClient, screenshotHelper, config, configManager,
-                client, clientThread, this::refreshBoard);
+                client, clientThread, tileIcons, this::refreshBoard);
         }
         boardWindow.setVisible(true);
         boardWindow.toFront();
@@ -357,6 +360,7 @@ public class BirdhousePanel extends PluginPanel {
         startCountdownTimer();
 
         BoardRenderer renderer = new BoardRenderer(PANEL_WIDTH, 0, 18, false);
+        renderer.setTileIcons(tileIcons);
 
         boardPanel.removeAll();
         boardPanel.add(renderer.renderBoard(board), BorderLayout.CENTER);
