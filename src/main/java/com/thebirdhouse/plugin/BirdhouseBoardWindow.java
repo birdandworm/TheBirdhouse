@@ -7,6 +7,7 @@ import net.runelite.api.Player;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.components.ThinProgressBar;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.LinkBrowser;
 
@@ -68,12 +69,14 @@ class BirdhouseBoardWindow extends JFrame {
     private final ConfigManager configManager;
     private final Client client;
     private final ClientThread clientThread;
+    private final TileIcons tileIcons;
     private final Runnable refreshRequest;
 
     private final JLabel statusLabel = new JLabel("Waiting for a board\u2026");
     private final JLabel progressLabel = new JLabel("");
     private final JLabel countdownLabel = new JLabel("");
     private final JButton pinButton = new JButton();
+    private final ThinProgressBar overallBar = new ThinProgressBar();
     private final JPanel boardHolder = new JPanel(new BorderLayout());
     private final JPanel listHolder = new JPanel();
     private final JScrollPane boardScroll;
@@ -87,13 +90,14 @@ class BirdhouseBoardWindow extends JFrame {
 
     BirdhouseBoardWindow(BirdhouseApiClient apiClient, ScreenshotHelper screenshotHelper,
                          BirdhouseConfig config, ConfigManager configManager, Client client,
-                         ClientThread clientThread, Runnable refreshRequest) {
+                         ClientThread clientThread, TileIcons tileIcons, Runnable refreshRequest) {
         this.apiClient = apiClient;
         this.screenshotHelper = screenshotHelper;
         this.config = config;
         this.configManager = configManager;
         this.client = client;
         this.clientThread = clientThread;
+        this.tileIcons = tileIcons;
         this.refreshRequest = refreshRequest;
 
         setTitle("The Birdhouse \u2014 Board");
@@ -170,6 +174,13 @@ class BirdhouseBoardWindow extends JFrame {
         progressLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         text.add(progressLabel);
 
+        overallBar.setForeground(new Color(150, 200, 100));
+        overallBar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        overallBar.setMaximumSize(new Dimension(260, 6));
+        overallBar.setPreferredSize(new Dimension(260, 6));
+        text.add(Box.createVerticalStrut(4));
+        text.add(overallBar);
+
         header.add(text, BorderLayout.WEST);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -229,8 +240,33 @@ class BirdhouseBoardWindow extends JFrame {
         this.board = board;
         this.roomCode = roomCode;
         statusLabel.setText(status);
+        statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         progressLabel.setText(progress);
+        updateOverallBar(board);
         rebuild();
+    }
+
+    /**
+     * Free squares are excluded: a bingo board that hands you the middle tile would
+     * otherwise open at 4% done and never reach zero remaining.
+     */
+    private void updateOverallBar(BoardData board) {
+        int total = 0;
+        int done = 0;
+        if (board != null && board.getTiles() != null) {
+            for (BoardTile tile : board.getTiles()) {
+                if (tile.isFree()) {
+                    continue;
+                }
+                total++;
+                if (tile.isCompleted()) {
+                    done++;
+                }
+            }
+        }
+        overallBar.setMaximumValue(Math.max(1, total));
+        overallBar.setValue(done);
+        overallBar.setVisible(total > 0);
     }
 
     void showStatus(String message, Color color) {
@@ -239,6 +275,7 @@ class BirdhouseBoardWindow extends JFrame {
         statusLabel.setForeground(color);
         progressLabel.setText("");
         countdownLabel.setText("");
+        overallBar.setVisible(false);
         rebuild();
     }
 
@@ -266,10 +303,12 @@ class BirdhouseBoardWindow extends JFrame {
 
             BoardRenderer boardRenderer = new BoardRenderer(lastRenderWidth, lastRenderHeight, MAX_CELL_SIZE, true);
             boardRenderer.setTileClickListener(this::showTileDialog);
+            boardRenderer.setTileIcons(tileIcons);
             boardHolder.add(boardRenderer.renderBoard(board), BorderLayout.CENTER);
 
             BoardRenderer listRenderer = new BoardRenderer(LIST_WIDTH, 0, 18, false);
             listRenderer.setTileClickListener(this::showTileDialog);
+            listRenderer.setTileIcons(tileIcons);
             listRenderer.renderTileList(board, listHolder);
         }
 
@@ -296,7 +335,26 @@ class BirdhouseBoardWindow extends JFrame {
         content.setBorder(new EmptyBorder(14, 14, 14, 14));
         content.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        content.add(heading(tile.getName()));
+        JPanel title = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        title.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel tileIcon = new JLabel();
+        if (tileIcons.apply(tile, tileIcon)) {
+            title.add(tileIcon);
+        }
+        title.add(heading(tile.getName()));
+        content.add(title);
+
+        // The host's note is a condition on the claim, so it goes above the controls in
+        // its own colour rather than being folded into the grey descriptive line.
+        String note = tile.getDescription();
+        if (note != null && !note.trim().isEmpty()) {
+            content.add(Box.createVerticalStrut(6));
+            JLabel noteLabel = body("<html><body style='width:340px'>" + note.trim() + "</body></html>",
+                new Color(255, 200, 100), 12f);
+            content.add(noteLabel);
+        }
+
         content.add(Box.createVerticalStrut(6));
         content.add(body(describe(tile), ColorScheme.LIGHT_GRAY_COLOR, 12f));
         content.add(Box.createVerticalStrut(12));

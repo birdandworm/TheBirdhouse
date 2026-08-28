@@ -1,6 +1,8 @@
 package com.thebirdhouse.plugin;
 
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
+import net.runelite.client.ui.components.ThinProgressBar;
 
 import javax.swing.*;
 import javax.swing.border.CompoundBorder;
@@ -52,6 +54,7 @@ class BoardRenderer {
     private final boolean detailed;
 
     private Consumer<BoardTile> tileClickListener;
+    private TileIcons tileIcons;
 
     BoardRenderer(int availableWidth, int availableHeight, int maxCellSize, boolean detailed) {
         this.availableWidth = availableWidth;
@@ -62,6 +65,10 @@ class BoardRenderer {
 
     void setTileClickListener(Consumer<BoardTile> listener) {
         this.tileClickListener = listener;
+    }
+
+    void setTileIcons(TileIcons tileIcons) {
+        this.tileIcons = tileIcons;
     }
 
     // ===== BOARD =====
@@ -1185,7 +1192,47 @@ class BoardRenderer {
         JLabel nameLabel = new JLabel(displayName);
         nameLabel.setForeground(completed ? new Color(120, 180, 120) : ColorScheme.LIGHT_GRAY_COLOR);
         nameLabel.setFont(nameLabel.getFont().deriveFont(fs(11f)));
-        row.add(nameLabel, BorderLayout.WEST);
+
+        // The host's note is a rule, not a hint ("solo only, no alts"), so it rides under
+        // the name where it cannot be missed rather than hiding in a tooltip.
+        String note = tile.getDescription();
+        if (note != null && !note.trim().isEmpty()) {
+            JPanel stack = new JPanel();
+            stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
+            stack.setOpaque(false);
+            nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            stack.add(nameLabel);
+
+            JLabel noteLabel = new JLabel(note.trim());
+            noteLabel.setForeground(COLOR_MUTED);
+            noteLabel.setFont(noteLabel.getFont().deriveFont(Font.ITALIC, fs(9f)));
+            noteLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            stack.add(noteLabel);
+
+            row.add(stack, BorderLayout.CENTER);
+        } else {
+            row.add(nameLabel, BorderLayout.CENTER);
+        }
+
+        boolean hasNote = note != null && !note.trim().isEmpty();
+        boolean hasIcon = false;
+        if (tileIcons != null) {
+            JLabel icon = new JLabel();
+            if (tileIcons.apply(tile, icon)) {
+                icon.setBorder(new EmptyBorder(0, 0, 0, 6));
+                row.add(icon, BorderLayout.WEST);
+                hasIcon = true;
+            }
+        }
+
+        // An item sprite is 32px tall and the row's own padding adds 8, so the default
+        // 32px cap would slice the icon in half.
+        int height = 32;
+        if (hasNote) height = detailed ? 54 : 46;
+        if (hasIcon) height = Math.max(height, 42);
+        if (detailed) height = Math.max(height, 40);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+        row.setPreferredSize(new Dimension(row.getPreferredSize().width, height));
 
         if (tile.getQuantity() > 1) {
             String qtyText = tile.getCurrentQty() + "/" + tile.getQuantity();
@@ -1196,7 +1243,7 @@ class BoardRenderer {
                     ? new Color(220, 180, 60)
                     : new Color(150, 150, 180);
             qtyLabel.setForeground(qtyColor);
-            qtyLabel.setFont(qtyLabel.getFont().deriveFont(fs(10f)));
+            qtyLabel.setFont(qtyLabel.getFont().deriveFont(Font.BOLD, fs(10f)));
             row.add(qtyLabel, BorderLayout.EAST);
         }
 
@@ -1205,16 +1252,20 @@ class BoardRenderer {
     }
 
     /**
-     * One board cell. Small cells are bare colour swatches because that is all 12px can
-     * carry; detailed cells tint the same state colour behind the tile's own name so the
-     * pop-out board reads without hovering every square.
+     * One board cell.
+     *
+     * Small cells are bare colour swatches because that is all 12px can carry. A detailed
+     * cell is a card: the tile's picture on top, its name under that, and a progress bar
+     * along the bottom for anything needing more than one drop. The icon is what makes a
+     * board scannable — a player recognises a voidwaker blade far faster than they read
+     * "Voidwaker Piece" — so it gets the vertical space and the name gets what's left.
      */
     private JComponent createCell(int cellSize, Color state, BoardTile tile,
                                   String label, String progress, String tooltip) {
         JPanel cell = new JPanel();
         cell.setPreferredSize(new Dimension(cellSize, cellSize));
         if (tooltip != null) {
-            cell.setToolTipText(tooltip);
+            cell.setToolTipText(richTooltip(tile, tooltip));
         }
 
         if (!detailed) {
@@ -1224,30 +1275,105 @@ class BoardRenderer {
         }
 
         Color bg = tint(state);
-        cell.setLayout(new BorderLayout());
+        cell.setLayout(new BorderLayout(0, 2));
         cell.setBackground(bg);
-        cell.setBorder(new CompoundBorder(new LineBorder(state, 1), new EmptyBorder(3, 3, 3, 3)));
+        cell.setBorder(new CompoundBorder(new LineBorder(state, 1), new EmptyBorder(5, 5, 5, 5)));
 
-        float font = Math.max(9f, Math.min(13f, cellSize / 9f));
+        // A cell only earns an icon once there is room for the icon and the name both.
+        boolean roomForIcon = cellSize >= 62;
+        if (roomForIcon && tileIcons != null && tile != null) {
+            JLabel icon = new JLabel("", SwingConstants.CENTER);
+            icon.setVerticalAlignment(SwingConstants.CENTER);
+            if (tileIcons.apply(tile, icon)) {
+                icon.setPreferredSize(new Dimension(cellSize - 12, Math.min(40, cellSize / 2)));
+                cell.add(icon, BorderLayout.NORTH);
+            }
+        }
 
         if (label != null && !label.isEmpty()) {
             JLabel name = new JLabel("<html><div style='text-align:center;width:"
-                + Math.max(30, cellSize - 14) + "px'>" + escapeHtml(label) + "</div></html>",
+                + Math.max(30, cellSize - 16) + "px'>" + escapeHtml(label) + "</div></html>",
                 SwingConstants.CENTER);
-            name.setForeground(Color.WHITE);
-            name.setFont(name.getFont().deriveFont(font));
+            name.setForeground(tile != null && tile.isCompleted() ? new Color(190, 230, 190) : Color.WHITE);
+            name.setFont(cellFont(cellSize));
+            name.setVerticalAlignment(SwingConstants.TOP);
             cell.add(name, BorderLayout.CENTER);
         }
 
-        if (progress != null && !progress.isEmpty()) {
-            JLabel prog = new JLabel(progress, SwingConstants.CENTER);
-            prog.setForeground(state);
-            prog.setFont(prog.getFont().deriveFont(Font.BOLD, Math.max(9f, font - 1f)));
-            cell.add(prog, BorderLayout.SOUTH);
+        JComponent footer = cellFooter(tile, state, progress, cellSize);
+        if (footer != null) {
+            cell.add(footer, BorderLayout.SOUTH);
         }
 
         attachClick(cell, tile, bg);
         return cell;
+    }
+
+    /**
+     * The bottom strip of a detailed cell: a real bar for multi-drop tiles, since "2/9"
+     * alone makes a player do the arithmetic to see how close they are, and a plain label
+     * for everything else.
+     */
+    private JComponent cellFooter(BoardTile tile, Color state, String progress, int cellSize) {
+        if (progress == null || progress.isEmpty()) {
+            return null;
+        }
+
+        JLabel text = new JLabel(progress, SwingConstants.CENTER);
+        text.setForeground(state);
+        text.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 11f));
+        text.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        boolean wantsBar = tile != null && tile.getQuantity() > 1 && cellSize >= 62;
+        if (!wantsBar) {
+            return text;
+        }
+
+        ThinProgressBar bar = new ThinProgressBar();
+        bar.setMaximumValue(tile.getQuantity());
+        bar.setValue(Math.min(tile.getCurrentQty(), tile.getQuantity()));
+        bar.setForeground(tile.getCurrentQty() >= tile.getQuantity() ? COLOR_COMPLETED : state);
+        bar.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JPanel wrapper = new JPanel();
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
+        wrapper.setOpaque(false);
+        wrapper.add(text);
+        wrapper.add(Box.createVerticalStrut(2));
+        wrapper.add(bar);
+        return wrapper;
+    }
+
+    /**
+     * Cell text uses the default sans rather than the RuneScape font. That font is a
+     * bitmap design meant for 16px, and the derived 9-13px sizes a board cell needs left
+     * every tile name looking smudged.
+     */
+    private static Font cellFont(int cellSize) {
+        float size = Math.max(10f, Math.min(14f, cellSize / 9f));
+        return FontManager.getDefaultFont().deriveFont(size);
+    }
+
+    /**
+     * A cell is too small to show the host's note inline, so the hover carries it along
+     * with what the tile actually accepts — the two questions a player hovers to answer.
+     */
+    private String richTooltip(BoardTile tile, String base) {
+        if (tile == null) {
+            return base;
+        }
+        StringBuilder sb = new StringBuilder("<html><body style='width:220px'><b>")
+            .append(escapeHtml(base)).append("</b>");
+
+        String note = tile.getDescription();
+        if (note != null && !note.trim().isEmpty()) {
+            sb.append("<br><i>").append(escapeHtml(note.trim())).append("</i>");
+        }
+        if (tile.getQuantity() > 1) {
+            sb.append("<br>").append(tile.getCurrentQty()).append(" of ").append(tile.getQuantity())
+              .append(" collected");
+        }
+        return sb.append("</body></html>").toString();
     }
 
     private String progressText(BoardTile tile) {
