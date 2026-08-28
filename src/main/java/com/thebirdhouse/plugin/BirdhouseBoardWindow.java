@@ -350,7 +350,7 @@ class BirdhouseBoardWindow extends JFrame {
         String note = tile.getDescription();
         if (note != null && !note.trim().isEmpty()) {
             content.add(Box.createVerticalStrut(6));
-            JLabel noteLabel = body("<html><body style='width:340px'>" + note.trim() + "</body></html>",
+            JLabel noteLabel = body(wrapText(BoardRenderer.escapeHtml(note.trim()), 340),
                 new Color(255, 200, 100), 12f);
             content.add(noteLabel);
         }
@@ -623,7 +623,7 @@ class BirdhouseBoardWindow extends JFrame {
     }
 
     private String describe(BoardTile tile) {
-        StringBuilder sb = new StringBuilder("<html><body style='width:340px'>");
+        StringBuilder sb = new StringBuilder();
         if (tile.getQuantity() > 1) {
             sb.append(tile.getCurrentQty()).append(" of ").append(tile.getQuantity()).append(" collected");
         } else {
@@ -634,8 +634,16 @@ class BirdhouseBoardWindow extends JFrame {
         }
         List<String> options = claimOptions(tile);
         sb.append("<br>Counts for: ").append(String.join(", ", options));
-        sb.append("</body></html>");
-        return sb.toString();
+        return wrapText(sb.toString(), 340);
+    }
+
+    /**
+     * A JLabel only wraps HTML inside a fixed-width table; a width on a div or body is
+     * ignored by Swing's renderer and the text is clipped instead.
+     */
+    private static String wrapText(String innerHtml, int width) {
+        return "<html><table width='" + width + "' cellpadding='0' cellspacing='0'>"
+            + "<tr><td align='left'>" + innerHtml + "</td></tr></table></html>";
     }
 
     private ImageIcon scaledIcon(byte[] bytes) {

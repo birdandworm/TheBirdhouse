@@ -53,6 +53,9 @@ class BoardRenderer {
     /** Detailed cells carry the tile name and progress; small ones are colour-coded squares. */
     private final boolean detailed;
 
+    /** Height of an in-game item sprite, which is what most tile icons are. */
+    private static final int ITEM_SPRITE_HEIGHT = 32;
+
     private Consumer<BoardTile> tileClickListener;
     private TileIcons tileIcons;
 
@@ -282,8 +285,7 @@ class BoardRenderer {
         }
         card.add(top);
 
-        JLabel name = new JLabel("<html><div style='width:" + (BOUNTY_CARD_WIDTH - 24) + "px'>"
-            + escapeHtml(tile.getName()) + "</div></html>");
+        JLabel name = new JLabel(wrapHtml(escapeHtml(tile.getName()), BOUNTY_CARD_WIDTH - 24, "left"));
         name.setForeground(Color.WHITE);
         name.setFont(name.getFont().deriveFont(12f));
         name.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1140,8 +1142,7 @@ class BoardRenderer {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         panel.setBorder(new EmptyBorder(0, 8, 2, 8));
-        // Swing has no text wrapping on JLabel; HTML with a width gives us one.
-        JLabel label = new JLabel("<html><body style='width:" + Math.max(120, availableWidth - 40) + "px'>" + text + "</body></html>");
+        JLabel label = new JLabel(wrapHtml(text, Math.max(120, availableWidth - 40), "left"));
         label.setForeground(new Color(130, 130, 150));
         label.setFont(label.getFont().deriveFont(fs(9f)));
         panel.add(label, BorderLayout.WEST);
@@ -1275,9 +1276,9 @@ class BoardRenderer {
         }
 
         Color bg = tint(state);
-        cell.setLayout(new BorderLayout(0, 2));
+        cell.setLayout(new BorderLayout(0, 1));
         cell.setBackground(bg);
-        cell.setBorder(new CompoundBorder(new LineBorder(state, 1), new EmptyBorder(5, 5, 5, 5)));
+        cell.setBorder(new CompoundBorder(new LineBorder(state, 1), new EmptyBorder(4, 3, 4, 3)));
 
         // A cell only earns an icon once there is room for the icon and the name both.
         boolean roomForIcon = cellSize >= 62;
@@ -1285,18 +1286,18 @@ class BoardRenderer {
             JLabel icon = new JLabel("", SwingConstants.CENTER);
             icon.setVerticalAlignment(SwingConstants.CENTER);
             if (tileIcons.apply(tile, icon)) {
-                icon.setPreferredSize(new Dimension(cellSize - 12, Math.min(40, cellSize / 2)));
+                // An item sprite is 32px tall; reserving more than that just steals rows
+                // from the name, which is what has to wrap.
+                icon.setPreferredSize(new Dimension(cellSize - 8, ITEM_SPRITE_HEIGHT));
                 cell.add(icon, BorderLayout.NORTH);
             }
         }
 
         if (label != null && !label.isEmpty()) {
-            JLabel name = new JLabel("<html><div style='text-align:center;width:"
-                + Math.max(30, cellSize - 16) + "px'>" + escapeHtml(label) + "</div></html>",
+            JLabel name = new JLabel(wrapHtml(escapeHtml(label), cellSize - 12, "center"),
                 SwingConstants.CENTER);
             name.setForeground(tile != null && tile.isCompleted() ? new Color(190, 230, 190) : Color.WHITE);
             name.setFont(cellFont(cellSize));
-            name.setVerticalAlignment(SwingConstants.TOP);
             cell.add(name, BorderLayout.CENTER);
         }
 
@@ -1350,7 +1351,7 @@ class BoardRenderer {
      * every tile name looking smudged.
      */
     private static Font cellFont(int cellSize) {
-        float size = Math.max(10f, Math.min(14f, cellSize / 9f));
+        float size = Math.max(10f, Math.min(13f, cellSize / 9f));
         return FontManager.getDefaultFont().deriveFont(size);
     }
 
@@ -1362,8 +1363,7 @@ class BoardRenderer {
         if (tile == null) {
             return base;
         }
-        StringBuilder sb = new StringBuilder("<html><body style='width:220px'><b>")
-            .append(escapeHtml(base)).append("</b>");
+        StringBuilder sb = new StringBuilder("<b>").append(escapeHtml(base)).append("</b>");
 
         String note = tile.getDescription();
         if (note != null && !note.trim().isEmpty()) {
@@ -1373,7 +1373,21 @@ class BoardRenderer {
             sb.append("<br>").append(tile.getCurrentQty()).append(" of ").append(tile.getQuantity())
               .append(" collected");
         }
-        return sb.append("</body></html>").toString();
+        return wrapHtml(sb.toString(), 220, "left");
+    }
+
+    /**
+     * HTML text that actually wraps at the given width.
+     *
+     * A JLabel only wraps inside a fixed-width table. Setting a width on a div or a body
+     * is the obvious way to write this, and is what this class did throughout, but Swing's
+     * HTML renderer ignores it: the label reports a one-line preferred size and the text
+     * gets silently clipped by whatever contains it. Callers pass HTML, so anything
+     * player-supplied must already be escaped.
+     */
+    private static String wrapHtml(String innerHtml, int width, String align) {
+        return "<html><table width='" + Math.max(30, width) + "' cellpadding='0' cellspacing='0'>"
+            + "<tr><td align='" + align + "'>" + innerHtml + "</td></tr></table></html>";
     }
 
     private String progressText(BoardTile tile) {
@@ -1423,7 +1437,7 @@ class BoardRenderer {
     }
 
     /** Tile names are player-authored and land inside an HTML label. */
-    private static String escapeHtml(String s) {
+    static String escapeHtml(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
