@@ -6,6 +6,7 @@ import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.http.api.item.ItemPrice;
 import okhttp3.Call;
 import okhttp3.Callback;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -21,8 +22,12 @@ import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -35,7 +40,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * costs nothing, needs no network, arrives instantly and looks like the game rather
  * than like a web page, so it is always preferred. Only when no item can be resolved
  * does this fall back to the picture the host attached on the site, which is a genuine
- * download and is therefore fetched once and kept for the rest of the session.
+ * download and is therefore fetched once and kept for the rest of the session, and only
+ * from the handful of hosts listed below.
  *
  * Every cache here is unbounded on purpose: it is keyed by the tiles of the boards a
  * player actually opened, which is tens of entries, and it must survive the board
@@ -49,6 +55,23 @@ public class TileIcons {
     /** Item sprites are ~36x32; drawn at native size they stay crisp. */
     private static final int REMOTE_ICON_SIZE = 32;
     private static final long MAX_REMOTE_BYTES = 2L * 1024 * 1024;
+
+    /**
+     * Hosts a tile picture may be downloaded from, matched exactly or as a subdomain.
+     *
+     * A tile's picture is a URL chosen by whoever built the board, and the site accepts
+     * a pasted link without re-hosting it. Downloading one tells whatever server is
+     * behind it the player's IP address, so a board must not be able to aim the client
+     * at a host of its choosing: these are the three places the site's own pictures
+     * come from, being our storage, our site, and the wiki it autofills from. A tile
+     * pointing anywhere else keeps its item sprite and loses only the fallback picture.
+     */
+    private static final Set<String> ALLOWED_IMAGE_HOSTS = Collections.unmodifiableSet(
+        new HashSet<>(Arrays.asList(
+            "thebirdhouse.games",
+            "runescape.wiki",
+            "firebasestorage.googleapis.com",
+            "storage.googleapis.com")));
 
     private final ItemManager itemManager;
     private final OkHttpClient httpClient;
@@ -85,18 +108,24 @@ public class TileIcons {
             }
         }
 
-        String url = tile.getImage();
-        if (url == null || url.trim().isEmpty()) {
+        String raw = tile.getImage();
+        if (raw == null || raw.trim().isEmpty()) {
             return false;
         }
 
-        ImageIcon cached = remoteIcons.get(url);
+        HttpUrl url = allowedImageUrl(raw);
+        if (url == null) {
+            return false;
+        }
+
+        String key = url.toString();
+        ImageIcon cached = remoteIcons.get(key);
         if (cached != null) {
             target.setIcon(cached);
             return true;
         }
 
-        fetchRemote(url, target);
+        fetchRemote(url, key, target);
         // The icon lands later, but the cell should still reserve room for it.
         return true;
     }
@@ -171,29 +200,46 @@ public class TileIcons {
     // ===== HOST-SUPPLIED IMAGES =====
 
     /**
+     * The address to download this picture from, or null to leave the tile alone.
+     *
+     * Plain HTTP is refused along with unknown hosts: every picture the site produces is
+     * served over TLS, so allowing http would only ever expose what the player is looking
+     * at to their network without making any real tile work.
+     */
+    private static HttpUrl allowedImageUrl(String raw) {
+        HttpUrl url = HttpUrl.parse(raw.trim());
+        if (url == null || !"https".equals(url.scheme())) {
+            return null;
+        }
+
+        String host = url.host().toLowerCase(Locale.ROOT);
+        for (String allowed : ALLOWED_IMAGE_HOSTS) {
+            if (host.equals(allowed) || host.endsWith("." + allowed)) {
+                return url;
+            }
+        }
+
+        log.debug("[Birdhouse] Ignoring tile image from unapproved host '{}'", host);
+        return null;
+    }
+
+    /**
      * Most of these are wiki URLs the site filled in automatically, so the bytes usually
      * come from the wiki rather than from our own storage. Either way it happens once per
      * URL per session, and a failure is silent: a missing picture is not worth a
      * complaint in the player's chat.
      */
-    private void fetchRemote(String url, JLabel target) {
-        if (!remoteInFlight.add(url)) {
+    private void fetchRemote(HttpUrl url, String key, JLabel target) {
+        if (!remoteInFlight.add(key)) {
             return;
         }
 
-        Request request;
-        try {
-            request = new Request.Builder().url(url).build();
-        } catch (IllegalArgumentException e) {
-            log.debug("[Birdhouse] Unusable tile image URL '{}'", url);
-            remoteInFlight.remove(url);
-            return;
-        }
+        Request request = new Request.Builder().url(url).build();
 
         httpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                remoteInFlight.remove(url);
+                remoteInFlight.remove(key);
                 log.debug("[Birdhouse] Tile image fetch failed: {}", e.getMessage());
             }
 
@@ -207,7 +253,7 @@ public class TileIcons {
                     if (icon == null) {
                         return;
                     }
-                    remoteIcons.put(url, icon);
+                    remoteIcons.put(key, icon);
                     SwingUtilities.invokeLater(() -> {
                         target.setIcon(icon);
                         target.revalidate();
@@ -216,7 +262,7 @@ public class TileIcons {
                 } catch (IOException | RuntimeException e) {
                     log.debug("[Birdhouse] Tile image decode failed: {}", e.getMessage());
                 } finally {
-                    remoteInFlight.remove(url);
+                    remoteInFlight.remove(key);
                 }
             }
         });
