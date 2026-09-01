@@ -166,6 +166,11 @@ public class TileIcons {
             int sep = matchName.indexOf(" - ");
             names.add(sep >= 0 ? matchName.substring(sep + 3).trim() : matchName);
         }
+        // Bounty tiles are often just named after the item ("Dragon warhammer") with
+        // no separate match list, so the label itself is worth a last try.
+        if (tile.getName() != null && !tile.getName().trim().isEmpty()) {
+            names.add(tile.getName().trim());
+        }
         return names;
     }
 

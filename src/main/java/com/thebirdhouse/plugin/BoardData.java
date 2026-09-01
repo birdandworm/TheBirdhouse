@@ -103,7 +103,8 @@ public class BoardData {
     public static class BattleshipShip {
         private String name;
         private int size;
-        private List<int[]> cells;
+        // Gson delivers JSON arrays-of-arrays as List<List<Number>>, not int[][].
+        private List<List<Number>> cells;
         private boolean sunk;
     }
 }

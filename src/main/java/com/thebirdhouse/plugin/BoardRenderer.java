@@ -39,10 +39,9 @@ class BoardRenderer {
     static final Color COLOR_ATTACKABLE = new Color(220, 140, 60);
     static final Color COLOR_MUTED = new Color(150, 150, 170);
     static final Color COLOR_HOT = new Color(240, 120, 60);
-    /** Defence cells carry only a hit/miss glyph, so they never need a named tile's room. */
-    private static final int MAX_DEFENSE_CELL_SIZE = 48;
     private static final int TERRITORY_CARD_WIDTH = 190;
-    private static final int BOUNTY_CARD_WIDTH = 215;
+    private static final int BOUNTY_CARD_WIDTH = 220;
+    private static final int BOUNTY_CARD_HEIGHT = 78;
     /** Beyond this a closesAt is a sentinel for "rotates out", not a real date. */
     private static final long NO_DEADLINE_AFTER_MS = 4_000_000_000_000L;
 
@@ -211,19 +210,15 @@ class BoardRenderer {
         panel.setBorder(new EmptyBorder(6, 6, 6, 6));
 
         List<BoardTile> ordered = orderBounties(tiles);
-        int cols = Math.max(1, (availableWidth - 20) / BOUNTY_CARD_WIDTH);
-        int rows = (int) Math.ceil(ordered.size() / (double) cols);
-        JPanel grid = new JPanel(new GridLayout(Math.max(1, rows), cols, 4, 4));
+        // FlowLayout keeps each card at its preferred size. GridLayout was stretching
+        // six cards to fill the whole window, which is why a 2x3 bounty board looked
+        // like six empty boxes with a caption in the corner.
+        JPanel grid = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
         grid.setBackground(ColorScheme.DARK_GRAY_COLOR);
         grid.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         for (BoardTile tile : ordered) {
             grid.add(bountyCard(tile));
-        }
-        for (int i = ordered.size(); i < Math.max(1, rows) * cols; i++) {
-            JPanel filler = new JPanel();
-            filler.setBackground(ColorScheme.DARK_GRAY_COLOR);
-            grid.add(filler);
         }
 
         panel.add(grid);
@@ -261,43 +256,57 @@ class BoardRenderer {
         }
 
         Color bg = tint(state);
-        JPanel card = new JPanel();
-        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        JPanel card = new JPanel(new BorderLayout(8, 0));
         card.setBackground(bg);
-        card.setBorder(new CompoundBorder(new LineBorder(state, hot ? 2 : 1), new EmptyBorder(6, 8, 6, 8)));
-        card.setPreferredSize(new Dimension(BOUNTY_CARD_WIDTH, 96));
+        card.setBorder(new CompoundBorder(new LineBorder(state, hot ? 2 : 1), new EmptyBorder(8, 8, 8, 8)));
+        card.setPreferredSize(new Dimension(BOUNTY_CARD_WIDTH, BOUNTY_CARD_HEIGHT));
+        card.setMinimumSize(new Dimension(BOUNTY_CARD_WIDTH, BOUNTY_CARD_HEIGHT));
+        card.setMaximumSize(new Dimension(BOUNTY_CARD_WIDTH, BOUNTY_CARD_HEIGHT));
+
+        JLabel icon = new JLabel("", SwingConstants.CENTER);
+        icon.setPreferredSize(new Dimension(ITEM_SPRITE_HEIGHT + 4, ITEM_SPRITE_HEIGHT + 4));
+        boolean drewIcon = tileIcons != null && tileIcons.apply(tile, icon);
+        if (drewIcon) {
+            card.add(icon, BorderLayout.WEST);
+        }
+
+        JPanel text = new JPanel();
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        text.setOpaque(false);
 
         JPanel top = new JPanel(new BorderLayout());
-        top.setBackground(bg);
+        top.setOpaque(false);
         top.setAlignmentX(Component.LEFT_ALIGNMENT);
-        top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
 
         JLabel points = new JLabel(tile.getPoints() + " pts");
         points.setForeground(state);
-        points.setFont(points.getFont().deriveFont(Font.BOLD, 14f));
+        points.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 13f));
         top.add(points, BorderLayout.WEST);
 
         if (hot) {
             JLabel badge = new JLabel("HOT");
             badge.setForeground(COLOR_HOT);
-            badge.setFont(badge.getFont().deriveFont(Font.BOLD, 10f));
+            badge.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 10f));
             top.add(badge, BorderLayout.EAST);
         }
-        card.add(top);
+        text.add(top);
 
-        JLabel name = new JLabel(wrapHtml(escapeHtml(tile.getName()), BOUNTY_CARD_WIDTH - 24, "left"));
+        int nameWidth = BOUNTY_CARD_WIDTH - (drewIcon ? ITEM_SPRITE_HEIGHT + 28 : 24);
+        JLabel name = new JLabel(wrapHtml(escapeHtml(tile.getName()), nameWidth, "left"));
         name.setForeground(Color.WHITE);
-        name.setFont(name.getFont().deriveFont(12f));
+        name.setFont(FontManager.getDefaultFont().deriveFont(12f));
         name.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.add(name);
+        text.add(name);
 
         JLabel status = new JLabel(bountyStatus(tile));
         status.setForeground(tile.isCompleted() ? COLOR_COMPLETED : COLOR_MUTED);
-        status.setFont(status.getFont().deriveFont(Font.BOLD, 10f));
+        status.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 10f));
         status.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.add(status);
+        text.add(status);
 
-        card.setToolTipText(tile.getName() + " \u2014 " + tile.getPoints() + " points");
+        card.add(text, BorderLayout.CENTER);
+        card.setToolTipText(richTooltip(tile, tile.getName() + " \u2014 " + tile.getPoints() + " points"));
         attachClick(card, tile, bg);
         return card;
     }
@@ -394,19 +403,15 @@ class BoardRenderer {
     private JPanel renderBattleshipGrids(BoardData board) {
         int rows = board.getRows();
         int cols = board.getCols();
-        // Two stacked grids share the height, so neither may claim all of it.
-        int cellSize = calculateCellSize(cols, rows * 2);
+        BoardData.BattleshipMeta meta = board.getBattleshipMeta();
 
-        JPanel container = new JPanel();
-        container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
-        container.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-        JLabel attackLabel = new JLabel("Your Attacks:");
-        attackLabel.setForeground(COLOR_BRAND);
-        attackLabel.setFont(attackLabel.getFont().deriveFont(Font.BOLD, fs(10f)));
-        attackLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        container.add(attackLabel);
-        container.add(Box.createVerticalStrut(2));
+        // Two 10x10 grids stacked make cells too short to hold a name, which is why
+        // the attack board used to look like overlapping fragments. Side-by-side
+        // wins whenever it produces a larger square.
+        int stacked = calculateCellSize(cols, rows * 2);
+        int beside = calculateCellSize(cols * 2, rows);
+        boolean sideBySide = detailed && beside > stacked && availableWidth >= cols * 2 * 18;
+        int cellSize = sideBySide ? beside : stacked;
 
         JPanel attackGrid = new JPanel(new GridLayout(rows, cols, 1, 1));
         attackGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -415,74 +420,150 @@ class BoardRenderer {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 if (tileIdx >= tiles.size()) {
-                    attackGrid.add(createCell(cellSize, COLOR_LOCKED, null, null, null, null));
+                    attackGrid.add(markerCell(cellSize, COLOR_LOCKED, null, null, null));
                     continue;
                 }
                 BoardTile tile = tiles.get(tileIdx++);
                 String result = tile.getAttackResult();
                 Color state;
                 String tip;
-                String badge;
+                String glyph;
                 if ("hit".equals(result) || "sunk".equals(result)) {
                     boolean isSunk = "sunk".equals(result);
                     state = isSunk ? COLOR_SUNK : COLOR_HIT;
-                    tip = (isSunk ? "\u2620 SUNK: " : "\u2716 HIT: ") + tile.getName();
-                    badge = isSunk ? "\u2620 sunk" : "\u2716 hit";
+                    tip = (isSunk ? "Sunk: " : "Hit: ") + tile.getName();
+                    glyph = isSunk ? "\u2620" : "\u2716";
                 } else if ("miss".equals(result)) {
                     state = COLOR_MISS;
-                    tip = "\u25CB Miss";
-                    badge = "\u25CB miss";
+                    tip = "Miss";
+                    glyph = "\u00B7";
                 } else {
                     state = COLOR_INCOMPLETE;
                     tip = tile.getName();
-                    badge = progressText(tile);
+                    glyph = null;
                 }
-                attackGrid.add(createCell(cellSize, state, tile, tile.getName(), badge, tip));
+                attackGrid.add(markerCell(cellSize, state, glyph, tip, tile));
             }
         }
-        container.add(center(attackGrid));
 
-        BoardData.BattleshipMeta meta = board.getBattleshipMeta();
-        if (meta != null && meta.getDefenseGrid() != null) {
-            container.add(Box.createVerticalStrut(6));
-            JLabel defLabel = new JLabel("Your Fleet:");
-            defLabel.setForeground(COLOR_BRAND);
-            defLabel.setFont(defLabel.getFont().deriveFont(Font.BOLD, fs(10f)));
-            defLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-            container.add(defLabel);
-            container.add(Box.createVerticalStrut(2));
-
-            java.util.Map<String, String> defGrid = meta.getDefenseGrid();
-            int defCell = detailed ? Math.min(cellSize, MAX_DEFENSE_CELL_SIZE) : cellSize;
-            JPanel defenseGrid = new JPanel(new GridLayout(rows, cols, 1, 1));
+        JPanel defenseGrid = null;
+        if (meta != null && (meta.getDefenseGrid() != null || meta.getOurShips() != null)) {
+            java.util.Map<String, String> shots = meta.getDefenseGrid() != null
+                ? meta.getDefenseGrid() : java.util.Collections.emptyMap();
+            defenseGrid = new JPanel(new GridLayout(rows, cols, 1, 1));
             defenseGrid.setBackground(ColorScheme.DARK_GRAY_COLOR);
             for (int r = 0; r < rows; r++) {
                 for (int c = 0; c < cols; c++) {
-                    String defResult = defGrid.get(r + "-" + c);
+                    String defResult = shots.get(r + "-" + c);
+                    boolean hasShip = shipAt(meta.getOurShips(), r, c);
                     Color state;
                     String tip;
                     String glyph;
                     if ("hit".equals(defResult) || "sunk".equals(defResult)) {
                         boolean isSunk = "sunk".equals(defResult);
                         state = isSunk ? COLOR_SUNK : COLOR_HIT;
-                        tip = isSunk ? "\u2620 Enemy sunk your ship!" : "Enemy hit here!";
+                        tip = isSunk ? "Enemy sunk this ship" : "Enemy hit here";
                         glyph = isSunk ? "\u2620" : "\u2716";
                     } else if ("miss".equals(defResult)) {
                         state = COLOR_MISS;
                         tip = "Enemy missed";
-                        glyph = "\u25CB";
+                        glyph = "\u00B7";
+                    } else if (hasShip) {
+                        state = COLOR_BRAND;
+                        tip = "Your ship";
+                        glyph = "\u25A0";
                     } else {
                         state = new Color(50, 70, 90);
-                        tip = "Safe";
+                        tip = "Water";
                         glyph = null;
                     }
-                    defenseGrid.add(createCell(defCell, state, null, null, glyph, tip));
+                    defenseGrid.add(markerCell(cellSize, state, glyph, tip, null));
                 }
             }
-            container.add(center(defenseGrid));
         }
 
+        JPanel container = new JPanel();
+        container.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        if (sideBySide && defenseGrid != null) {
+            container.setLayout(new GridLayout(1, 2, 12, 0));
+            container.add(labeledGrid("Your Attacks", attackGrid));
+            container.add(labeledGrid("Your Fleet", defenseGrid));
+        } else {
+            container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
+            container.add(labeledGrid("Your Attacks", attackGrid));
+            if (defenseGrid != null) {
+                container.add(Box.createVerticalStrut(8));
+                container.add(labeledGrid("Your Fleet", defenseGrid));
+            }
+        }
         return container;
+    }
+
+    private JPanel labeledGrid(String title, JComponent grid) {
+        JPanel wrap = new JPanel();
+        wrap.setLayout(new BoxLayout(wrap, BoxLayout.Y_AXIS));
+        wrap.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        JLabel label = new JLabel(title);
+        label.setForeground(COLOR_BRAND);
+        label.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, fs(11f)));
+        label.setAlignmentX(Component.CENTER_ALIGNMENT);
+        wrap.add(label);
+        wrap.add(Box.createVerticalStrut(4));
+        JPanel centered = center(grid);
+        centered.setAlignmentX(Component.CENTER_ALIGNMENT);
+        wrap.add(centered);
+        return wrap;
+    }
+
+    /**
+     * A battleship square is a colour and a mark, never a name. A 10x10 cell is too
+     * small to wrap "Voidwaker blade" and the previous cell renderer tried anyway,
+     * which is what produced the overlapping fragments on the attack grid.
+     */
+    private JPanel markerCell(int cellSize, Color state, String glyph, String tooltip, BoardTile tile) {
+        JPanel cell = new JPanel(new BorderLayout());
+        cell.setPreferredSize(new Dimension(cellSize, cellSize));
+        cell.setMinimumSize(new Dimension(cellSize, cellSize));
+        if (tooltip != null) {
+            cell.setToolTipText(tile != null ? richTooltip(tile, tooltip) : tooltip);
+        }
+
+        if (!detailed) {
+            cell.setBackground(state);
+            attachClick(cell, tile, state);
+            return cell;
+        }
+
+        Color bg = tint(state);
+        cell.setBackground(bg);
+        cell.setBorder(new LineBorder(state, 1));
+        if (glyph != null && cellSize >= 12) {
+            JLabel mark = new JLabel(glyph, SwingConstants.CENTER);
+            mark.setForeground(state);
+            mark.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD,
+                Math.max(10f, Math.min(16f, cellSize * 0.45f))));
+            cell.add(mark, BorderLayout.CENTER);
+        }
+        attachClick(cell, tile, bg);
+        return cell;
+    }
+
+    private static boolean shipAt(List<BoardData.BattleshipShip> ships, int r, int c) {
+        if (ships == null) {
+            return false;
+        }
+        for (BoardData.BattleshipShip ship : ships) {
+            if (ship == null || ship.getCells() == null) {
+                continue;
+            }
+            for (List<Number> cell : ship.getCells()) {
+                if (cell != null && cell.size() >= 2 && cell.get(0) != null && cell.get(1) != null
+                    && cell.get(0).intValue() == r && cell.get(1).intValue() == c) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private JPanel renderChipDropBoard(BoardData board) {
@@ -1010,10 +1091,20 @@ class BoardRenderer {
         boolean hot = "hot".equals(tile.getTier());
         JPanel row = newRow();
 
-        JLabel nameLabel = new JLabel((hot ? "\uD83D\uDD25 " : "") + tile.getName());
+        JLabel nameLabel = new JLabel((hot ? "HOT  " : "") + tile.getName());
         nameLabel.setForeground(tile.isCompleted() ? new Color(120, 180, 120) : ColorScheme.LIGHT_GRAY_COLOR);
         nameLabel.setFont(nameLabel.getFont().deriveFont(fs(11f)));
-        row.add(nameLabel, BorderLayout.WEST);
+        row.add(nameLabel, BorderLayout.CENTER);
+
+        if (tileIcons != null) {
+            JLabel icon = new JLabel();
+            if (tileIcons.apply(tile, icon)) {
+                icon.setBorder(new EmptyBorder(0, 0, 0, 6));
+                row.add(icon, BorderLayout.WEST);
+                row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+                row.setPreferredSize(new Dimension(row.getPreferredSize().width, 42));
+            }
+        }
 
         JLabel pointsLabel = new JLabel(tile.getPoints() + " pts");
         pointsLabel.setForeground(hot ? COLOR_HOT : COLOR_MUTED);
