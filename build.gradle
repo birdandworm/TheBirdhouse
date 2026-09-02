@@ -23,10 +23,11 @@ dependencies {
     // `gradlew build` fails on the test sources and stops being a usable check of the
     // build the plugin hub runs.
     testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+    testImplementation 'junit:junit:4.13.2'
 }
 
 group = 'com.thebirdhouse'
-version = '1.3.0'
+version = '1.3.1'
 sourceCompatibility = '11'
 targetCompatibility = '11'
 

@@ -610,11 +610,74 @@ class BoardRenderer {
         return center(grid);
     }
 
+    // A tile race tile's key is its index along the track. Blind mode leaves fogged tiles
+    // out of the list altogether, so a tile's place in the list is not its position and
+    // reading one as the other shifts every tile after the first hidden one.
+    private static int trackPosition(BoardTile tile, int fallback) {
+        String key = tile.getKey();
+        if (key != null) {
+            try {
+                return Integer.parseInt(key.trim());
+            } catch (NumberFormatException ignored) {
+                // Not a track index; fall back to list order.
+            }
+        }
+        return fallback;
+    }
+
+    // The square a track position occupies on a snaking board: row 0 runs left to right,
+    // row 1 right to left, and so on. Mirrors getSerpentinePosition in the website's
+    // src/services/tileRaceEngine.js. BoardRendererLayoutTest covers this copy.
+    static int serpentineSlot(int position, int cols) {
+        int row = position / cols;
+        int colInRow = position % cols;
+        int col = (row % 2 == 1) ? (cols - 1 - colInRow) : colInRow;
+        return row * cols + col;
+    }
+
     private JPanel renderTileRaceBoard(BoardData board) {
         List<BoardTile> tiles = board.getTiles();
-        int tilesPerRow = Math.min(detailed ? 8 : 12, Math.max(1, tiles.size()));
-        int totalRows = (int) Math.ceil(tiles.size() / (double) tilesPerRow);
-        int cellSize = calculateCellSize(tilesPerRow, totalRows);
+
+        // The track snakes, the same way it does on the website: the first row runs left
+        // to right, the next right to left, so the end of one row sits directly above the
+        // start of the next. Drawing every row left to right instead mirrored the odd
+        // ones, which is not a cosmetic difference — standing at the right-hand end of a
+        // row, the next tile looked like the one directly below when it was really the
+        // one at the far left.
+        //
+        // The column count comes from the server so all three views agree. Choosing our
+        // own would snake in different places, which puts the turns somewhere else again.
+        int maxPosition = -1;
+        for (int i = 0; i < tiles.size(); i++) {
+            maxPosition = Math.max(maxPosition, trackPosition(tiles.get(i), i));
+        }
+        if (maxPosition < 0) return center(new JPanel());
+
+        int cols = board.getCols();
+        if (cols <= 0) {
+            cols = Math.min(detailed ? 8 : 12, maxPosition + 1);
+        }
+        // Blind mode hides tiles rather than shrinking the board, so the track has to be
+        // tall enough for the furthest position we were handed, not for the number of
+        // tiles actually in the list. Sizing it from the list would drop the tiles past
+        // the end of it.
+        int rows = Math.max(board.getRows(), (int) Math.ceil((maxPosition + 1) / (double) cols));
+
+        BoardTile[] slots = new BoardTile[rows * cols];
+        int[] slotPositions = new int[slots.length];
+        java.util.Arrays.fill(slotPositions, -1);
+        for (int i = 0; i < tiles.size(); i++) {
+            BoardTile tile = tiles.get(i);
+            int pos = trackPosition(tile, i);
+            if (pos < 0) continue;
+            int slot = serpentineSlot(pos, cols);
+            if (slot >= 0 && slot < slots.length) {
+                slots[slot] = tile;
+                slotPositions[slot] = pos;
+            }
+        }
+
+        int cellSize = calculateCellSize(cols, rows);
 
         java.util.Set<Integer> opponentPositions = new java.util.HashSet<>();
         if (board.getOpponents() != null) {
@@ -623,17 +686,18 @@ class BoardRenderer {
             }
         }
 
-        JPanel track = new JPanel(new GridLayout(totalRows, tilesPerRow, 1, 1));
+        JPanel track = new JPanel(new GridLayout(rows, cols, 1, 1));
         track.setBackground(ColorScheme.DARK_GRAY_COLOR);
         track.setBorder(new EmptyBorder(4, 4, 4, 4));
 
-        for (int i = 0; i < totalRows * tilesPerRow; i++) {
-            if (i >= tiles.size()) {
+        for (int slot = 0; slot < slots.length; slot++) {
+            BoardTile tile = slots[slot];
+            if (tile == null) {
                 track.add(createCell(cellSize, ColorScheme.DARK_GRAY_COLOR, null, null, null, null));
                 continue;
             }
 
-            BoardTile tile = tiles.get(i);
+            int i = slotPositions[slot];
             String special = tile.getSpecial();
             Color state;
             String tip;
@@ -663,7 +727,10 @@ class BoardRenderer {
                 tip = tile.getName();
             }
 
-            track.add(createCell(cellSize, state, tile, tile.getName(), badge, tip));
+            // The same number the website prints in the corner of every race tile, so a
+            // player can read one board against the other and land on the same tile.
+            track.add(createCell(cellSize, state, tile, tile.getName(), badge,
+                tip + "  (#" + i + ")"));
         }
 
         return center(track);
