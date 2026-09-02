@@ -16,6 +16,13 @@ dependencies {
 
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+    // src/test holds the standard RuneLite harness, which starts the real client with
+    // this plugin loaded as a builtin. It needs the client on the runtime classpath, not
+    // just to compile against, which is why this is not compileOnly. Without it
+    // `gradlew build` fails on the test sources and stops being a usable check of the
+    // build the plugin hub runs.
+    testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
 }
 
 group = 'com.thebirdhouse'
