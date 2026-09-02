@@ -68,6 +68,7 @@ public class BirdhousePanel extends PluginPanel {
     private ChatData lastChat;
     /** Newest message id already seen, so a notification fires once and not on first load. */
     private String lastSeenMessageId;
+    private String lastChatTeamId;
     private boolean chatPrimed;
     private int chatFailures;
 
@@ -409,6 +410,9 @@ public class BirdhousePanel extends PluginPanel {
     private void applyChat(ChatData chat) {
         lastChat = chat;
 
+        boolean teamChanged = lastChatTeamId != null && !lastChatTeamId.equals(chat.getTeamId());
+        lastChatTeamId = chat.getTeamId();
+
         String self = localPlayerName();
         chatPanel.setSelfName(self);
         chatPanel.setThread(chat);
@@ -421,7 +425,12 @@ public class BirdhousePanel extends PluginPanel {
 
         // The first successful poll only records where the thread is up to. Without it,
         // logging in would announce the whole backlog as though it had just arrived.
-        if (!chatPrimed) {
+        //
+        // A team change re-primes for the same reason: the newest message in your new
+        // team's thread is almost certainly not new, it is just the first one you are
+        // allowed to see, and announcing it would be wrong whether you switched yourself
+        // or an admin moved you.
+        if (!chatPrimed || teamChanged) {
             chatPrimed = true;
             lastSeenMessageId = newestId;
             return;

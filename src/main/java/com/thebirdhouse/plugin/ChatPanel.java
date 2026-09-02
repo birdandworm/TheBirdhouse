@@ -55,8 +55,15 @@ public class ChatPanel extends JPanel {
     private final JTextField input;
     private final JButton sendButton;
 
-    /** Ids of what is currently drawn, so an unchanged poll does not rebuild the view. */
-    private List<String> renderedIds = new ArrayList<>();
+    /**
+     * Ids of what is currently drawn, so an unchanged poll does not rebuild the view.
+     *
+     * Null means nothing has been drawn yet, which is distinct from an empty thread:
+     * comparing two empty lists as equal would skip the very first render and leave the
+     * message area blank instead of saying there is nothing in it.
+     */
+    private List<String> renderedIds;
+    private String renderedTeamId;
     private String selfName = "";
     private boolean sending;
     private boolean loaded;
@@ -161,6 +168,14 @@ public class ChatPanel extends JPanel {
         String team = chat != null && chat.getTeamName() != null ? chat.getTeamName() : null;
         titleLabel.setText(team != null ? "Team Chat \u2014 " + team : "Team Chat");
 
+        // Being moved between teams replaces the conversation wholesale. Without this the
+        // id comparison below would skip the redraw whenever both threads happen to be
+        // empty, and someone reading back through the old team's messages would be left
+        // scrolled into the middle of a thread that is no longer theirs.
+        String teamId = chat != null ? chat.getTeamId() : null;
+        boolean teamChanged = renderedTeamId != null && !renderedTeamId.equals(teamId);
+        renderedTeamId = teamId;
+
         // Clear the startup placeholder once, rather than on every poll: after this the
         // status line belongs to send feedback, and a poll must not wipe an error.
         if (!loaded) {
@@ -172,11 +187,11 @@ public class ChatPanel extends JPanel {
         for (ChatMessage m : messages) {
             ids.add(m.getId());
         }
-        if (ids.equals(renderedIds)) {
+        if (!teamChanged && ids.equals(renderedIds)) {
             return;
         }
 
-        boolean pinnedToBottom = isScrolledToBottom();
+        boolean pinnedToBottom = isScrolledToBottom() || teamChanged;
         renderedIds = ids;
 
         messagesPanel.removeAll();
@@ -204,7 +219,10 @@ public class ChatPanel extends JPanel {
 
     /** Called when the room has no team thread at all, so the reply box is pointless. */
     public void setUnavailable(String reason) {
-        renderedIds = new ArrayList<>();
+        // Back to "nothing drawn", so being put back on a team redraws even if that
+        // team's thread is empty and the id comparison would otherwise match.
+        renderedIds = null;
+        renderedTeamId = null;
         titleLabel.setText("Team Chat");
         messagesPanel.removeAll();
         JLabel note = new JLabel(BoardRenderer.wrapHtml(
