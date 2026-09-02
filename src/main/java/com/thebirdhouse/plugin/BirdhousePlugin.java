@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.WorldChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -147,12 +148,24 @@ public class BirdhousePlugin extends Plugin {
             clueTracker.reset();
             loadBoard();
 
-            if (config.trackActivity()) {
+            // Team status is carried by the session write, so it needs a session even
+            // for a player who has playtime tracking switched off.
+            if (config.trackActivity() || config.showTeamStatus()) {
+                sessionTracker.setWorld(client.getWorld());
                 sessionTracker.startSession(playerName);
             }
         } else if (event.getGameState() == GameState.LOGIN_SCREEN) {
             sessionTracker.endSession();
         }
+    }
+
+    /**
+     * A hop is the only thing that changes a player's world, so status is reported on
+     * the event rather than polled. Read here because this runs on the client thread.
+     */
+    @Subscribe
+    public void onWorldChanged(WorldChanged event) {
+        sessionTracker.setWorld(client.getWorld());
     }
 
     @Subscribe
@@ -176,6 +189,19 @@ public class BirdhousePlugin extends Plugin {
 
         if ("enableTeamChat".equals(event.getKey())) {
             birdhousePanel.onChatConfigChanged();
+        }
+
+        if ("showTeamStatus".equals(event.getKey())) {
+            // Sharing has to reach the server before the panel is any use: the read is
+            // reciprocal, so a player who just switched it on would otherwise be told
+            // they aren't sharing until their next heartbeat.
+            if (config.showTeamStatus() && client.getGameState() == GameState.LOGGED_IN
+                && client.getLocalPlayer() != null) {
+                sessionTracker.setWorld(client.getWorld());
+                sessionTracker.startSession(client.getLocalPlayer().getName());
+            }
+            sessionTracker.onStatusSharingChanged();
+            birdhousePanel.onTeamStatusConfigChanged();
         }
     }
 

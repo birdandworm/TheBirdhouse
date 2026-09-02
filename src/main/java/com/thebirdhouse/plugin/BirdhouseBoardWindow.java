@@ -73,6 +73,9 @@ class BirdhouseBoardWindow extends JFrame {
     private final TileIcons tileIcons;
     private final Runnable refreshRequest;
     private final ChatPanel chatPanel;
+    private final TeamStatusPanel statusPanel;
+    /** Chat and status share the bottom of the right-hand column, one tab each. */
+    private final JTabbedPane teamTabs;
 
     private final JLabel statusLabel = new JLabel("Waiting for a board\u2026");
     private final JLabel progressLabel = new JLabel("");
@@ -134,15 +137,18 @@ class BirdhouseBoardWindow extends JFrame {
         // own edge: it belongs next to the board you are discussing, and the window is
         // wide enough here to show a conversation properly, unlike the 225px sidebar.
         chatPanel = new ChatPanel(chatSender, LIST_WIDTH - 30);
-        chatPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
-        chatPanel.setPreferredSize(new Dimension(LIST_WIDTH, CHAT_HEIGHT));
-        chatPanel.setVisible(false);
+        statusPanel = new TeamStatusPanel(LIST_WIDTH - 30);
+
+        teamTabs = new JTabbedPane();
+        teamTabs.setBorder(new EmptyBorder(8, 8, 8, 8));
+        teamTabs.setPreferredSize(new Dimension(LIST_WIDTH, CHAT_HEIGHT));
+        teamTabs.setVisible(false);
 
         JPanel eastColumn = new JPanel(new BorderLayout());
         eastColumn.setBackground(ColorScheme.DARK_GRAY_COLOR);
         eastColumn.setPreferredSize(new Dimension(LIST_WIDTH, 0));
         eastColumn.add(listScroll, BorderLayout.CENTER);
-        eastColumn.add(chatPanel, BorderLayout.SOUTH);
+        eastColumn.add(teamTabs, BorderLayout.SOUTH);
         root.add(eastColumn, BorderLayout.EAST);
 
         JLabel hint = new JLabel("Click any tile to capture a screenshot and submit it as proof.");
@@ -166,10 +172,29 @@ class BirdhouseBoardWindow extends JFrame {
         setPinned(config.boardWindowAlwaysOnTop());
     }
 
-    void setChatVisible(boolean visible) {
-        chatPanel.setVisible(visible);
-        chatPanel.getParent().revalidate();
-        chatPanel.getParent().repaint();
+    /** Mirrors the sidebar's tab set, so the two views never disagree about what is on. */
+    void syncTeamTabs() {
+        String selected = teamTabs.getTabCount() > 0 && teamTabs.getSelectedIndex() >= 0
+            ? teamTabs.getTitleAt(teamTabs.getSelectedIndex())
+            : null;
+
+        teamTabs.removeAll();
+        if (config.enableTeamChat()) {
+            teamTabs.addTab("Chat", chatPanel);
+        }
+        if (config.showTeamStatus()) {
+            teamTabs.addTab("Team", statusPanel);
+        }
+
+        for (int i = 0; i < teamTabs.getTabCount(); i++) {
+            if (teamTabs.getTitleAt(i).equals(selected)) {
+                teamTabs.setSelectedIndex(i);
+                break;
+            }
+        }
+        teamTabs.setVisible(teamTabs.getTabCount() > 0);
+        teamTabs.getParent().revalidate();
+        teamTabs.getParent().repaint();
     }
 
     /** Mirrors the sidebar's thread; the sidebar owns the only poller. */
@@ -181,6 +206,11 @@ class BirdhouseBoardWindow extends JFrame {
         }
         chatPanel.setSendEnabled(true);
         chatPanel.setThread(chat);
+    }
+
+    /** Mirrors the sidebar's roster, from the same single poller. */
+    void updatePresence(PresenceData presence) {
+        statusPanel.setPresence(presence);
     }
 
     private JPanel buildHeader() {

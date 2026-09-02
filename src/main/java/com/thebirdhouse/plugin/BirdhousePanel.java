@@ -36,6 +36,11 @@ public class BirdhousePanel extends PluginPanel {
     // room that has no thread at all.
     private static final int CHAT_POLL_IDLE_SECONDS = 300;
     private static final int CHAT_PANEL_HEIGHT = 190;
+    // Status is polled far slower than chat and has no knob, because there is nothing to
+    // gain: the client reports its own world the moment it hops, and otherwise only
+    // heartbeats every five minutes, so a faster poll would return the same answer.
+    private static final int PRESENCE_POLL_SECONDS = 60;
+    private static final int PRESENCE_POLL_IDLE_SECONDS = 300;
 
     private final BirdhouseConfig config;
     private final DropMatcher dropMatcher;
@@ -65,6 +70,12 @@ public class BirdhousePanel extends PluginPanel {
      * pop-out window does not double the request rate.
      */
     private final ChatPanel chatPanel;
+    /** Chat and status share the space under the board, one tab each. */
+    private final JTabbedPane teamTabs;
+    private final TeamStatusPanel teamStatusPanel;
+    private ScheduledFuture<?> presenceTask;
+    private PresenceData lastPresence;
+    private int presenceFailures;
     private ChatData lastChat;
     /** Newest message id already seen, so a notification fires once and not on first load. */
     private String lastSeenMessageId;
@@ -183,13 +194,51 @@ public class BirdhousePanel extends PluginPanel {
         // Team chat sits under the board rather than replacing it: the point is to read a
         // reply without leaving whatever you were doing, which includes looking at tiles.
         chatPanel = new ChatPanel(this::sendChat, PANEL_WIDTH - 40);
-        chatPanel.setBorder(new EmptyBorder(8, 0, 0, 0));
-        chatPanel.setPreferredSize(new Dimension(PANEL_WIDTH, CHAT_PANEL_HEIGHT));
-        chatPanel.setVisible(config.enableTeamChat());
+        // Not `statusPanel`: that name is taken by the header's status block above, and a
+        // local of a compatible type would quietly swallow this assignment.
+        teamStatusPanel = new TeamStatusPanel(PANEL_WIDTH - 40);
+
+        // Tabs rather than stacking both: at 225px wide there is only room for one of
+        // them at a readable height, and they are read at different moments anyway —
+        // chat while you are talking, status while you are deciding where to go.
+        teamTabs = new JTabbedPane();
+        teamTabs.setBorder(new EmptyBorder(8, 0, 0, 0));
+        teamTabs.setPreferredSize(new Dimension(PANEL_WIDTH, CHAT_PANEL_HEIGHT));
+        syncTeamTabs();
 
         add(topSection, BorderLayout.NORTH);
         add(mainPanel, BorderLayout.CENTER);
-        add(chatPanel, BorderLayout.SOUTH);
+        add(teamTabs, BorderLayout.SOUTH);
+    }
+
+    /**
+     * Show a tab per enabled feature, and nothing at all when neither is on.
+     *
+     * Rebuilt wholesale because JTabbedPane has no "hide this tab", and a disabled tab
+     * that explains it is disabled would just be settings restated in the panel. The
+     * selection is preserved by title so toggling the other feature does not move the
+     * player off what they were reading.
+     */
+    private void syncTeamTabs() {
+        String selected = teamTabs.getTabCount() > 0 && teamTabs.getSelectedIndex() >= 0
+            ? teamTabs.getTitleAt(teamTabs.getSelectedIndex())
+            : null;
+
+        teamTabs.removeAll();
+        if (config.enableTeamChat()) {
+            teamTabs.addTab("Chat", chatPanel);
+        }
+        if (config.showTeamStatus()) {
+            teamTabs.addTab("Team", teamStatusPanel);
+        }
+
+        for (int i = 0; i < teamTabs.getTabCount(); i++) {
+            if (teamTabs.getTitleAt(i).equals(selected)) {
+                teamTabs.setSelectedIndex(i);
+                break;
+            }
+        }
+        teamTabs.setVisible(teamTabs.getTabCount() > 0);
     }
 
     /** Wired into both chat views; the backend picks the team from the room roster. */
@@ -216,6 +265,7 @@ public class BirdhousePanel extends PluginPanel {
         stopAutoRefresh();
         scheduleNextRefresh(POLL_ACTIVE_SECONDS);
         scheduleNextChatRefresh(0);
+        scheduleNextPresenceRefresh(0);
         if (config.openBoardWindowOnStart()) {
             SwingUtilities.invokeLater(this::openBoardWindow);
         }
@@ -240,9 +290,9 @@ public class BirdhousePanel extends PluginPanel {
     public void onChatConfigChanged() {
         SwingUtilities.invokeLater(() -> {
             boolean enabled = config.enableTeamChat();
-            chatPanel.setVisible(enabled);
+            syncTeamTabs();
             if (boardWindow != null && boardWindow.isDisplayable()) {
-                boardWindow.setChatVisible(enabled);
+                boardWindow.syncTeamTabs();
             }
             revalidate();
             repaint();
@@ -281,6 +331,10 @@ public class BirdhousePanel extends PluginPanel {
             chatTask.cancel(false);
             chatTask = null;
         }
+        if (presenceTask != null) {
+            presenceTask.cancel(false);
+            presenceTask = null;
+        }
     }
 
     public void shutdown() {
@@ -310,7 +364,7 @@ public class BirdhousePanel extends PluginPanel {
             boardWindow = new BirdhouseBoardWindow(apiClient, screenshotHelper, config, configManager,
                 client, clientThread, tileIcons, this::refreshBoard, this::sendChat);
         }
-        boardWindow.setChatVisible(config.enableTeamChat());
+        boardWindow.syncTeamTabs();
         boardWindow.setVisible(true);
         boardWindow.toFront();
         pushToWindow();
@@ -326,6 +380,7 @@ public class BirdhousePanel extends PluginPanel {
             boardWindow.showStatus(lastStatus, lastStatusColor);
         }
         pushChatToWindow();
+        pushPresenceToWindow();
     }
 
     /** Shows a single status line with no board, for the states where there is nothing to draw. */
@@ -405,6 +460,83 @@ public class BirdhousePanel extends PluginPanel {
             applyChat(chat);
             scheduleNextChatRefresh(chatPollSeconds());
         }));
+    }
+
+    /** Applies a config change to the status views without waiting for the next poll. */
+    public void onTeamStatusConfigChanged() {
+        SwingUtilities.invokeLater(() -> {
+            syncTeamTabs();
+            if (boardWindow != null && boardWindow.isDisplayable()) {
+                boardWindow.syncTeamTabs();
+            }
+            revalidate();
+            repaint();
+            if (config.showTeamStatus()) {
+                scheduleNextPresenceRefresh(0);
+            }
+        });
+    }
+
+    private void scheduleNextPresenceRefresh(int seconds) {
+        if (scheduler == null || scheduler.isShutdown()) return;
+        if (presenceTask != null) {
+            presenceTask.cancel(false);
+        }
+        presenceTask = scheduler.schedule(
+            () -> SwingUtilities.invokeLater(this::refreshPresence),
+            seconds, TimeUnit.SECONDS
+        );
+    }
+
+    /**
+     * Poll the caller's team roster.
+     *
+     * Same self-rescheduling shape as the chat poll. Unlike chat there is no send path,
+     * so a failure here has nowhere else to surface and the panel says so directly
+     * rather than sitting on the loading placeholder.
+     */
+    public void refreshPresence() {
+        if (!config.showTeamStatus()) {
+            scheduleNextPresenceRefresh(PRESENCE_POLL_IDLE_SECONDS);
+            return;
+        }
+
+        String token = config.authToken();
+        String roomCode = resolveRoomCode();
+        if (token == null || token.trim().isEmpty() || roomCode == null) {
+            teamStatusPanel.showNote("Set your auth token and join a room to see your team.", null);
+            lastPresence = null;
+            pushPresenceToWindow();
+            scheduleNextPresenceRefresh(PRESENCE_POLL_IDLE_SECONDS);
+            return;
+        }
+
+        apiClient.fetchPresence(roomCode).thenAccept(presence -> SwingUtilities.invokeLater(() -> {
+            if (presence == null) {
+                presenceFailures++;
+                if (presenceFailures >= 3) {
+                    teamStatusPanel.setPresence(null);
+                }
+                scheduleNextPresenceRefresh(PRESENCE_POLL_SECONDS);
+                return;
+            }
+            presenceFailures = 0;
+            lastPresence = presence;
+            teamStatusPanel.setPresence(presence);
+            pushPresenceToWindow();
+
+            // A room with no teams will never grow one, so stop asking every minute.
+            scheduleNextPresenceRefresh(presence.getTeamId() == null
+                ? PRESENCE_POLL_IDLE_SECONDS
+                : PRESENCE_POLL_SECONDS);
+        }));
+    }
+
+    private void pushPresenceToWindow() {
+        if (boardWindow == null || !boardWindow.isDisplayable()) {
+            return;
+        }
+        boardWindow.updatePresence(lastPresence);
     }
 
     private void applyChat(ChatData chat) {

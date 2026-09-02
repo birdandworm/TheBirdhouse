@@ -268,6 +268,68 @@ public class BirdhouseApiClient {
         }
     }
 
+    /**
+     * Fetch the caller's own team roster with online status attached.
+     *
+     * Same cache-first shape as chat, including the 404 rule: the cache host answers
+     * this from live listeners on tiny per-player nodes, and a 404 that isn't one of our
+     * own JSON errors means the edge declined to route rather than that the room is
+     * gone. That distinction is the whole reason chat shipped dead.
+     */
+    public CompletableFuture<PresenceData> fetchPresence(String roomCode) {
+        return CompletableFuture.supplyAsync(() -> {
+            PresenceResult cached = requestPresence(BOARD_BASE_URL, roomCode);
+            if (cached.presence != null) {
+                return cached.presence;
+            }
+            if (!cached.retryable) {
+                return null;
+            }
+            log.debug("Presence cache host unavailable for {}, falling back to primary backend", roomCode);
+            return requestPresence(BASE_URL, roomCode).presence;
+        });
+    }
+
+    /** Outcome of one presence request; see BoardResult for why retryable is tracked. */
+    private static final class PresenceResult {
+        private final PresenceData presence;
+        private final boolean retryable;
+
+        private PresenceResult(PresenceData presence, boolean retryable) {
+            this.presence = presence;
+            this.retryable = retryable;
+        }
+    }
+
+    private PresenceResult requestPresence(String base, String roomCode) {
+        try {
+            Request request = new Request.Builder()
+                .url(base + "/presence/" + roomCode)
+                .header("Authorization", "Bearer " + authToken)
+                .get()
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                String body = response.body() != null ? response.body().string() : "";
+                if (response.isSuccessful()) {
+                    PresenceData parsed = gson.fromJson(body, PresenceData.class);
+                    return new PresenceResult(parsed, parsed == null);
+                }
+                int code = response.code();
+                if (code >= 500 || code == 429 || code == 408) {
+                    return new PresenceResult(null, true);
+                }
+                if (code == 404 && !isApiError(body)) {
+                    return new PresenceResult(null, true);
+                }
+                return new PresenceResult(null, false);
+            }
+        } catch (IOException e) {
+            log.debug("Presence fetch failed from {}: {}", base, e.getMessage());
+            return new PresenceResult(null, true);
+        }
+    }
+
     /** Whether a body is one of our own JSON errors rather than a proxy's error page. */
     private boolean isApiError(String body) {
         if (body == null || body.isEmpty()) {

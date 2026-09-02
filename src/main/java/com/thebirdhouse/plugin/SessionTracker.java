@@ -37,11 +37,68 @@ public class SessionTracker {
     @Inject
     private ActivityTracker activityTracker;
 
+    @Inject
+    private BirdhouseConfig config;
+
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> heartbeatTask;
     private ScheduledFuture<?> flushTask;
     private String currentPlayer;
     private long sessionStart;
+
+    // Pushed in from the plugin's event handlers rather than read from the client here,
+    // because the heartbeat runs on this scheduler thread and reading client state off
+    // the client thread is exactly the kind of thing that works until it doesn't.
+    private volatile int world;
+
+    /**
+     * Stamp the session-wide extras onto every event we send.
+     *
+     * The world goes out even when sharing is off — the server drops it in that case,
+     * and sending zero instead would be a second way to say the same thing.
+     */
+    private SessionEvent event(String type, String playerName, long timestamp) {
+        SessionEvent e = new SessionEvent(type, playerName, timestamp);
+        e.setShareStatus(config.showTeamStatus());
+        e.setWorld(world);
+        return e;
+    }
+
+    /**
+     * Note the world the player is now on.
+     *
+     * A hop is reported immediately instead of waiting for the next heartbeat, because
+     * a world up to five minutes out of date is worse than none: a teammate hops to
+     * meet you and finds you gone. This is the only extra write the feature adds, and
+     * it happens a handful of times a session rather than on a timer.
+     */
+    public void setWorld(int newWorld) {
+        if (newWorld <= 0 || newWorld == world) {
+            return;
+        }
+        world = newWorld;
+        if (currentPlayer != null && config.showTeamStatus()) {
+            reportNow();
+        }
+    }
+
+    /**
+     * Push the current sharing state without waiting for the next heartbeat, so turning
+     * the toggle off clears the stored world promptly rather than up to five minutes later.
+     */
+    public void onStatusSharingChanged() {
+        if (currentPlayer != null) {
+            reportNow();
+        }
+    }
+
+    private void reportNow() {
+        String name = currentPlayer;
+        if (name == null) {
+            return;
+        }
+        scheduler.execute(() -> apiClient.reportSession(event("heartbeat", name, System.currentTimeMillis())));
+    }
 
     public void startSession(String playerName) {
         if (currentPlayer != null && currentPlayer.equals(playerName)) {
@@ -56,10 +113,10 @@ public class SessionTracker {
         // Start each session with a clean activity slate so nothing carries over.
         activityTracker.reset();
 
-        apiClient.reportSession(new SessionEvent("login", playerName, sessionStart));
+        apiClient.reportSession(event("login", playerName, sessionStart));
 
         heartbeatTask = scheduler.scheduleAtFixedRate(
-            () -> apiClient.reportSession(new SessionEvent("heartbeat", playerName, System.currentTimeMillis())),
+            () -> apiClient.reportSession(event("heartbeat", playerName, System.currentTimeMillis())),
             HEARTBEAT_INTERVAL_MS,
             HEARTBEAT_INTERVAL_MS,
             TimeUnit.MILLISECONDS
@@ -91,11 +148,14 @@ public class SessionTracker {
         activityTracker.flush();
 
         long duration = System.currentTimeMillis() - sessionStart;
-        SessionEvent event = new SessionEvent("logout", currentPlayer, System.currentTimeMillis());
+        SessionEvent event = event("logout", currentPlayer, System.currentTimeMillis());
         event.setDurationMs(duration);
         apiClient.reportSession(event);
 
         log.info("Session ended for {} ({}m)", currentPlayer, duration / 60000);
         currentPlayer = null;
+        // Logging out doesn't put you on world 0, and a stale world must not be
+        // re-reported by the next session's login before its first hop.
+        world = 0;
     }
 }

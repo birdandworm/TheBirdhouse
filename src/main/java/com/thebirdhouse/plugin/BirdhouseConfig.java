@@ -150,9 +150,32 @@ public interface BirdhouseConfig extends Config {
     }
 
     @ConfigSection(
+        name = "Team Status",
+        description = "See which teammates are online and what world they're on",
+        position = 4,
+        closedByDefault = true
+    )
+    String teamStatusSection = "teamStatus";
+
+    @ConfigItem(
+        keyName = "showTeamStatus",
+        name = "Share & Show Team Status",
+        description =
+            "Show which of your teammates are logged in and what world they're on, and share yours with them. "
+                + "Reciprocal: teammates who leave this off are listed but show no status, and neither do you to them. "
+                + "Only your own team can see it, never the rest of the room.",
+        section = teamStatusSection,
+        position = 0,
+        warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers"
+    )
+    default boolean showTeamStatus() {
+        return false;
+    }
+
+    @ConfigSection(
         name = "Activity Tracking",
         description = "Session and playtime tracking",
-        position = 4
+        position = 5
     )
     String activitySection = "activity";
 
@@ -192,7 +215,7 @@ public interface BirdhouseConfig extends Config {
     @ConfigSection(
         name = "Clan Leaderboard",
         description = "Report drops to your clan's Discord leaderboard via The Birdhouse (replaces Dink for clan tracking)",
-        position = 5
+        position = 6
     )
     String clanSection = "clan";
 
