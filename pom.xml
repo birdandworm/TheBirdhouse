@@ -6,7 +6,10 @@
 
     <groupId>com.thebirdhouse</groupId>
     <artifactId>birdhouse-plugin</artifactId>
-    <version>1.0.4</version>
+    <!-- Keep in step with build.gradle, which is what the plugin hub actually reads.
+         This one only names the local jar, but a stale number here means you cannot tell
+         which build you side-loaded. -->
+    <version>1.3.0</version>
     <packaging>jar</packaging>
 
     <name>The Birdhouse</name>
@@ -16,7 +19,11 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <runelite.version>1.12.26</runelite.version>
+        <!-- Keep this matched to the client you actually run (see .runelite/repository2).
+             The plugin hub builds against latest.release via build.gradle, so a stale
+             version here means local testing compiles against an API the hub build does
+             not, which is the one thing local testing is supposed to rule out. -->
+        <runelite.version>1.12.37</runelite.version>
         <lombok.version>1.18.30</lombok.version>
     </properties>
 
