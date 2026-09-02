@@ -1476,7 +1476,7 @@ class BoardRenderer {
      * gets silently clipped by whatever contains it. Callers pass HTML, so anything
      * player-supplied must already be escaped.
      */
-    private static String wrapHtml(String innerHtml, int width, String align) {
+    static String wrapHtml(String innerHtml, int width, String align) {
         return "<html><table width='" + Math.max(30, width) + "' cellpadding='0' cellspacing='0'>"
             + "<tr><td align='" + align + "'>" + innerHtml + "</td></tr></table></html>";
     }

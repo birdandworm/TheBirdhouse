@@ -200,6 +200,110 @@ public class BirdhouseApiClient {
     }
 
     /**
+     * Fetch the caller's own team chat thread.
+     *
+     * Cache host first, same as the board and for the same reason: the cache serves
+     * this from a live listener, so polling it costs no database reads and a short
+     * interval is affordable. A 4xx is again not a reason to fall back, since both
+     * hosts read the same room roster and would answer identically.
+     */
+    public CompletableFuture<ChatData> fetchChat(String roomCode) {
+        return CompletableFuture.supplyAsync(() -> {
+            ChatResult cached = requestChat(BOARD_BASE_URL, roomCode);
+            if (cached.chat != null) {
+                return cached.chat;
+            }
+            if (!cached.retryable) {
+                return null;
+            }
+            log.debug("Chat cache host unavailable for {}, falling back to primary backend", roomCode);
+            return requestChat(BASE_URL, roomCode).chat;
+        });
+    }
+
+    /** Outcome of one chat request; see BoardResult for why retryable is tracked. */
+    private static final class ChatResult {
+        private final ChatData chat;
+        private final boolean retryable;
+
+        private ChatResult(ChatData chat, boolean retryable) {
+            this.chat = chat;
+            this.retryable = retryable;
+        }
+    }
+
+    private ChatResult requestChat(String base, String roomCode) {
+        try {
+            Request request = new Request.Builder()
+                .url(base + "/chat/" + roomCode)
+                .header("Authorization", "Bearer " + authToken)
+                .get()
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful() && response.body() != null) {
+                    ChatData parsed = gson.fromJson(response.body().string(), ChatData.class);
+                    return new ChatResult(parsed, parsed == null);
+                }
+                int code = response.code();
+                return new ChatResult(null, code >= 500 || code == 429 || code == 408);
+            }
+        } catch (IOException e) {
+            log.debug("Chat fetch failed from {}: {}", base, e.getMessage());
+            return new ChatResult(null, true);
+        }
+    }
+
+    /**
+     * Send one message to the caller's own team thread.
+     *
+     * Always the primary backend: the cache host is read-only by design, which is what
+     * keeps it unable to affect game state.
+     *
+     * Resolves to null on success, or a short message suitable for showing the player.
+     * The server's own wording is preferred where it gave any, since it is the side
+     * that knows whether this was too long, too fast, or the wrong room.
+     */
+    public CompletableFuture<String> sendChat(String roomCode, String text) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (!hasAuthToken()) {
+                return "No auth token";
+            }
+            try {
+                JsonObject body = new JsonObject();
+                body.addProperty("text", text);
+
+                Request request = new Request.Builder()
+                    .url(BASE_URL + "/chat/" + roomCode)
+                    .header("Authorization", "Bearer " + authToken)
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(body)))
+                    .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful()) {
+                        return null;
+                    }
+                    String reason = null;
+                    if (response.body() != null) {
+                        try {
+                            JsonObject json = gson.fromJson(response.body().string(), JsonObject.class);
+                            if (json != null && json.has("error")) {
+                                reason = json.get("error").getAsString();
+                            }
+                        } catch (RuntimeException e) {
+                            log.debug("Unparseable chat error body: {}", e.getMessage());
+                        }
+                    }
+                    return reason != null ? reason : "Server returned " + response.code();
+                }
+            } catch (IOException e) {
+                log.debug("Chat send failed: {}", e.getMessage());
+                return "Could not reach the server";
+            }
+        });
+    }
+
+    /**
      * Report a session event (login/logout/heartbeat).
      */
     public void reportSession(SessionEvent event) {

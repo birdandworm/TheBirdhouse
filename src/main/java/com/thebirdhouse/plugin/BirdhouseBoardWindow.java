@@ -62,6 +62,7 @@ class BirdhouseBoardWindow extends JFrame {
     private static final Color COLOR_ERROR = new Color(255, 120, 120);
     private static final Color COLOR_OK = new Color(120, 200, 120);
     private static final Color COLOR_MUTED = new Color(150, 150, 170);
+    private static final int CHAT_HEIGHT = 260;
 
     private final BirdhouseApiClient apiClient;
     private final ScreenshotHelper screenshotHelper;
@@ -71,6 +72,7 @@ class BirdhouseBoardWindow extends JFrame {
     private final ClientThread clientThread;
     private final TileIcons tileIcons;
     private final Runnable refreshRequest;
+    private final ChatPanel chatPanel;
 
     private final JLabel statusLabel = new JLabel("Waiting for a board\u2026");
     private final JLabel progressLabel = new JLabel("");
@@ -90,7 +92,8 @@ class BirdhouseBoardWindow extends JFrame {
 
     BirdhouseBoardWindow(BirdhouseApiClient apiClient, ScreenshotHelper screenshotHelper,
                          BirdhouseConfig config, ConfigManager configManager, Client client,
-                         ClientThread clientThread, TileIcons tileIcons, Runnable refreshRequest) {
+                         ClientThread clientThread, TileIcons tileIcons, Runnable refreshRequest,
+                         ChatPanel.Sender chatSender) {
         this.apiClient = apiClient;
         this.screenshotHelper = screenshotHelper;
         this.config = config;
@@ -126,7 +129,21 @@ class BirdhouseBoardWindow extends JFrame {
         listScroll.getVerticalScrollBar().setUnitIncrement(16);
         listScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         listScroll.setPreferredSize(new Dimension(LIST_WIDTH, 0));
-        root.add(listScroll, BorderLayout.EAST);
+
+        // Chat shares the right-hand column with the tile list rather than getting its
+        // own edge: it belongs next to the board you are discussing, and the window is
+        // wide enough here to show a conversation properly, unlike the 225px sidebar.
+        chatPanel = new ChatPanel(chatSender, LIST_WIDTH - 30);
+        chatPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
+        chatPanel.setPreferredSize(new Dimension(LIST_WIDTH, CHAT_HEIGHT));
+        chatPanel.setVisible(false);
+
+        JPanel eastColumn = new JPanel(new BorderLayout());
+        eastColumn.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        eastColumn.setPreferredSize(new Dimension(LIST_WIDTH, 0));
+        eastColumn.add(listScroll, BorderLayout.CENTER);
+        eastColumn.add(chatPanel, BorderLayout.SOUTH);
+        root.add(eastColumn, BorderLayout.EAST);
 
         JLabel hint = new JLabel("Click any tile to capture a screenshot and submit it as proof.");
         hint.setForeground(COLOR_MUTED);
@@ -147,6 +164,23 @@ class BirdhouseBoardWindow extends JFrame {
 
         restoreBounds();
         setPinned(config.boardWindowAlwaysOnTop());
+    }
+
+    void setChatVisible(boolean visible) {
+        chatPanel.setVisible(visible);
+        chatPanel.getParent().revalidate();
+        chatPanel.getParent().repaint();
+    }
+
+    /** Mirrors the sidebar's thread; the sidebar owns the only poller. */
+    void updateChat(ChatData chat, String selfName) {
+        chatPanel.setSelfName(selfName);
+        if (chat == null || chat.getTeamId() == null) {
+            chatPanel.setUnavailable("This room has no team chat.");
+            return;
+        }
+        chatPanel.setSendEnabled(true);
+        chatPanel.setThread(chat);
     }
 
     private JPanel buildHeader() {

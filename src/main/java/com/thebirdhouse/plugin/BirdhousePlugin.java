@@ -173,6 +173,10 @@ public class BirdhousePlugin extends Plugin {
                 loadBoard();
             }
         }
+
+        if ("enableTeamChat".equals(event.getKey())) {
+            birdhousePanel.onChatConfigChanged();
+        }
     }
 
     private void loadBoard() {

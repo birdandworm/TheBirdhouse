@@ -108,9 +108,51 @@ public interface BirdhouseConfig extends Config {
     }
 
     @ConfigSection(
+        name = "Team Chat",
+        description = "Read and reply to your event team's chat in the panel",
+        position = 3,
+        closedByDefault = true
+    )
+    String teamChatSection = "teamChat";
+
+    @ConfigItem(
+        keyName = "enableTeamChat",
+        name = "Enable Team Chat",
+        description = "Show your event team's chat in the panel and the board window, and let you reply to it.",
+        section = teamChatSection,
+        position = 0,
+        warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers"
+    )
+    default boolean enableTeamChat() {
+        return false;
+    }
+
+    @ConfigItem(
+        keyName = "teamChatPollSeconds",
+        name = "Refresh Seconds",
+        description = "How often to check for new team messages while a game is live. Lower feels more like a conversation.",
+        section = teamChatSection,
+        position = 1
+    )
+    default int teamChatPollSeconds() {
+        return 10;
+    }
+
+    @ConfigItem(
+        keyName = "notifyOnTeamChat",
+        name = "Notify On New Message",
+        description = "Fire a RuneLite notification when a teammate posts. Useful mid-fight, when you aren't watching the panel.",
+        section = teamChatSection,
+        position = 2
+    )
+    default boolean notifyOnTeamChat() {
+        return false;
+    }
+
+    @ConfigSection(
         name = "Activity Tracking",
         description = "Session and playtime tracking",
-        position = 3
+        position = 4
     )
     String activitySection = "activity";
 
@@ -150,7 +192,7 @@ public interface BirdhouseConfig extends Config {
     @ConfigSection(
         name = "Clan Leaderboard",
         description = "Report drops to your clan's Discord leaderboard via The Birdhouse (replaces Dink for clan tracking)",
-        position = 4
+        position = 5
     )
     String clanSection = "clan";
 
