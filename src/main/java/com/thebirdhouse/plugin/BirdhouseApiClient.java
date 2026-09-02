@@ -241,16 +241,43 @@ public class BirdhouseApiClient {
                 .build();
 
             try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    ChatData parsed = gson.fromJson(response.body().string(), ChatData.class);
+                String body = response.body() != null ? response.body().string() : "";
+                if (response.isSuccessful()) {
+                    ChatData parsed = gson.fromJson(body, ChatData.class);
                     return new ChatResult(parsed, parsed == null);
                 }
                 int code = response.code();
-                return new ChatResult(null, code >= 500 || code == 429 || code == 408);
+                if (code >= 500 || code == 429 || code == 408) {
+                    return new ChatResult(null, true);
+                }
+                // A 404 that did not come from our own application is a proxy declining to
+                // route, not "no such room", and those two are otherwise indistinguishable
+                // from here. This is how chat failed on release: the reverse proxy in front
+                // of the cache host allowed /board and /healthz only, and answered /chat
+                // with a plain-text 404 that looked authoritative enough to stop the
+                // fallback. Trying the primary backend once costs a request; treating it as
+                // final disables the feature outright.
+                if (code == 404 && !isApiError(body)) {
+                    return new ChatResult(null, true);
+                }
+                return new ChatResult(null, false);
             }
         } catch (IOException e) {
             log.debug("Chat fetch failed from {}: {}", base, e.getMessage());
             return new ChatResult(null, true);
+        }
+    }
+
+    /** Whether a body is one of our own JSON errors rather than a proxy's error page. */
+    private boolean isApiError(String body) {
+        if (body == null || body.isEmpty()) {
+            return false;
+        }
+        try {
+            JsonObject json = gson.fromJson(body, JsonObject.class);
+            return json != null && json.has("error");
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 

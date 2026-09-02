@@ -69,6 +69,7 @@ public class BirdhousePanel extends PluginPanel {
     /** Newest message id already seen, so a notification fires once and not on first load. */
     private String lastSeenMessageId;
     private boolean chatPrimed;
+    private int chatFailures;
 
     /** The pop-out window mirrors whatever the sidebar last rendered, so that is kept here. */
     private BirdhouseBoardWindow boardWindow;
@@ -380,9 +381,16 @@ public class BirdhousePanel extends PluginPanel {
 
         apiClient.fetchChat(roomCode).thenAccept(chat -> SwingUtilities.invokeLater(() -> {
             if (chat == null) {
+                chatFailures++;
+                // One dropped poll is not worth alarming anyone when the next is seconds
+                // away, but a persistent failure must not keep looking like a slow load.
+                if (chatFailures >= 3) {
+                    chatPanel.showProblem("Chat unavailable \u2014 still trying");
+                }
                 scheduleNextChatRefresh(chatPollSeconds());
                 return;
             }
+            chatFailures = 0;
 
             if (chat.getTeamId() == null) {
                 chatPanel.setUnavailable("This room has no team chat.");

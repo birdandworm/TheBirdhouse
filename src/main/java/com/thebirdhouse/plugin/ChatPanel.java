@@ -129,6 +129,18 @@ public class ChatPanel extends JPanel {
         this.selfName = name != null ? name : "";
     }
 
+    /**
+     * Chat could not be loaded.
+     *
+     * Worth its own method because the panel's failure mode was otherwise to sit on the
+     * startup placeholder indefinitely, which is indistinguishable from a slow network
+     * and hides the actual cause completely.
+     */
+    public void showProblem(String message) {
+        loaded = true;
+        showStatus(message, COLOR_ERROR);
+    }
+
     public void showStatus(String message, Color color) {
         statusLabel.setText(message == null || message.isEmpty() ? " " : message);
         statusLabel.setForeground(color != null ? color : COLOR_MUTED);
