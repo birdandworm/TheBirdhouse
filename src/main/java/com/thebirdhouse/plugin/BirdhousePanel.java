@@ -2,6 +2,7 @@ package com.thebirdhouse.plugin;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -426,6 +427,13 @@ public class BirdhousePanel extends PluginPanel {
             return;
         }
 
+        // Deliberately leaves whatever thread is already drawn on screen: logging out is
+        // not a reason to take the conversation away from someone still reading it.
+        if (!loggedIn()) {
+            scheduleNextChatRefresh(CHAT_POLL_IDLE_SECONDS);
+            return;
+        }
+
         String token = config.authToken();
         String roomCode = resolveRoomCode();
         if (token == null || token.trim().isEmpty() || roomCode == null) {
@@ -497,6 +505,13 @@ public class BirdhousePanel extends PluginPanel {
      */
     public void refreshPresence() {
         if (!config.showTeamStatus()) {
+            scheduleNextPresenceRefresh(PRESENCE_POLL_IDLE_SECONDS);
+            return;
+        }
+
+        // Nothing to report while logged out, and the server would not report us as
+        // online either, so this is the one place where backing off loses nothing at all.
+        if (!loggedIn()) {
             scheduleNextPresenceRefresh(PRESENCE_POLL_IDLE_SECONDS);
             return;
         }
@@ -588,6 +603,31 @@ public class BirdhousePanel extends PluginPanel {
             return message.isHasImage() ? "[image]" : "";
         }
         return text.length() <= 80 ? text : text.substring(0, 77) + "\u2026";
+    }
+
+    /**
+     * Whether the player is actually in game.
+     *
+     * Both the chat and status polls back off when they are not, because a client parked
+     * at the login screen has nothing to say and nobody to say it to — and the poll
+     * otherwise carried on every ten seconds all night. Backed off rather than stopped,
+     * with an immediate refresh on login, so nothing actually waits on the idle interval.
+     */
+    private boolean loggedIn() {
+        try {
+            return client.getGameState() == GameState.LOGGED_IN;
+        } catch (RuntimeException e) {
+            // Same reasoning as localPlayerName: never let a client read throw into a poll.
+            return false;
+        }
+    }
+
+    /** Called on login so the backed-off pollers pick up straight away. */
+    public void onLoggedIn() {
+        SwingUtilities.invokeLater(() -> {
+            scheduleNextChatRefresh(0);
+            scheduleNextPresenceRefresh(0);
+        });
     }
 
     private String localPlayerName() {

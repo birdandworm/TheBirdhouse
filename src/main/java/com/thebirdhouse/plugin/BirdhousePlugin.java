@@ -148,6 +148,10 @@ public class BirdhousePlugin extends Plugin {
             clueTracker.reset();
             loadBoard();
 
+            // The chat and status polls back off while logged out, so they are nudged
+            // here rather than left to wait out the idle interval.
+            birdhousePanel.onLoggedIn();
+
             // Team status is carried by the session write, so it needs a session even
             // for a player who has playtime tracking switched off.
             if (config.trackActivity() || config.showTeamStatus()) {
