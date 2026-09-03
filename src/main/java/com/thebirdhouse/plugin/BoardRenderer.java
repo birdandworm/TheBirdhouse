@@ -38,7 +38,11 @@ class BoardRenderer {
     static final Color COLOR_MISS = new Color(80, 80, 120);
     static final Color COLOR_ATTACKABLE = new Color(220, 140, 60);
     static final Color COLOR_MUTED = new Color(150, 150, 170);
+    /** Tile notes, a touch brighter than muted text so a whole sentence stays readable. */
+    static final Color COLOR_NOTE = new Color(178, 178, 192);
     static final Color COLOR_HOT = new Color(240, 120, 60);
+    /** Ceiling on a row carrying a wrapped note, so one long note cannot eat the list. */
+    private static final int NOTE_ROW_MAX_HEIGHT = 78;
     private static final int TERRITORY_CARD_WIDTH = 190;
     private static final int BOUNTY_CARD_WIDTH = 220;
     private static final int BOUNTY_CARD_HEIGHT = 78;
@@ -1343,6 +1347,19 @@ class BoardRenderer {
     private JPanel createTileRow(BoardTile tile, boolean completed, String prefix) {
         JPanel row = newRow();
 
+        // The icon goes on first because the note below has to wrap inside whatever width
+        // is left once the sprite and the quantity badge have taken theirs.
+        boolean hasIcon = false;
+        if (tileIcons != null) {
+            JLabel icon = new JLabel();
+            if (tileIcons.apply(tile, icon)) {
+                icon.setBorder(new EmptyBorder(0, 0, 0, 6));
+                row.add(icon, BorderLayout.WEST);
+                hasIcon = true;
+            }
+        }
+        boolean hasQty = tile.getQuantity() > 1;
+
         String displayName = (prefix != null ? prefix : "") + tile.getName();
         if (completed && prefix == null) {
             displayName = "\u2713 " + tile.getName();
@@ -1355,16 +1372,27 @@ class BoardRenderer {
         // The host's note is a rule, not a hint ("solo only, no alts"), so it rides under
         // the name where it cannot be missed rather than hiding in a tooltip.
         String note = tile.getDescription();
-        if (note != null && !note.trim().isEmpty()) {
-            JPanel stack = new JPanel();
+        boolean hasNote = note != null && !note.trim().isEmpty();
+        JPanel stack = null;
+
+        if (hasNote) {
+            stack = new JPanel();
             stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
             stack.setOpaque(false);
             nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
             stack.add(nameLabel);
 
-            JLabel noteLabel = new JLabel(note.trim());
-            noteLabel.setForeground(COLOR_MUTED);
-            noteLabel.setFont(noteLabel.getFont().deriveFont(Font.ITALIC, fs(9f)));
+            // Three things made this hard to read, and the size was the least of them.
+            // It was a plain label, which does not wrap, so anything longer than the row
+            // ran off the edge and the tail was simply gone — and every generated note
+            // ("Obtain a Ring of the gods from Wilderness Boss Uniques") is longer than a
+            // 225px sidebar row. It was also italic at 9pt, and a slanted pixel font that
+            // small is mush. Wrapped, upright, and a point larger.
+            int noteWidth = availableWidth - 22 - (hasIcon ? 40 : 0) - (hasQty ? 34 : 0);
+            JLabel noteLabel = new JLabel(
+                wrapHtml(escapeHtml(note.trim()), Math.max(80, noteWidth), "left"));
+            noteLabel.setForeground(COLOR_NOTE);
+            noteLabel.setFont(noteLabel.getFont().deriveFont(fs(10f)));
             noteLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
             stack.add(noteLabel);
 
@@ -1373,23 +1401,17 @@ class BoardRenderer {
             row.add(nameLabel, BorderLayout.CENTER);
         }
 
-        boolean hasNote = note != null && !note.trim().isEmpty();
-        boolean hasIcon = false;
-        if (tileIcons != null) {
-            JLabel icon = new JLabel();
-            if (tileIcons.apply(tile, icon)) {
-                icon.setBorder(new EmptyBorder(0, 0, 0, 6));
-                row.add(icon, BorderLayout.WEST);
-                hasIcon = true;
-            }
-        }
-
         // An item sprite is 32px tall and the row's own padding adds 8, so the default
         // 32px cap would slice the icon in half.
         int height = 32;
-        if (hasNote) height = detailed ? 54 : 46;
         if (hasIcon) height = Math.max(height, 42);
         if (detailed) height = Math.max(height, 40);
+        if (stack != null) {
+            // Tall enough for however many lines the note wrapped to, but not without
+            // limit: a host can paste a paragraph, and a row sized to hold one would push
+            // the rest of the list off the screen. The tooltip still carries the whole of it.
+            height = Math.min(Math.max(height, stack.getPreferredSize().height + 10), NOTE_ROW_MAX_HEIGHT);
+        }
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
         row.setPreferredSize(new Dimension(row.getPreferredSize().width, height));
 
@@ -1406,8 +1428,25 @@ class BoardRenderer {
             row.add(qtyLabel, BorderLayout.EAST);
         }
 
+        // A note longer than the row's height cap is cut off, so the whole of it has to
+        // be reachable somewhere. The children get the tooltip as well: a label is not
+        // registered with the tooltip manager on its own, and it sits over the row, so
+        // hovering the text itself would otherwise show nothing.
+        applyTooltip(row, richTooltip(tile, displayName));
+
         attachClick(row, tile, ColorScheme.DARKER_GRAY_COLOR);
         return row;
+    }
+
+    private static void applyTooltip(Container root, String text) {
+        if (root instanceof JComponent) {
+            ((JComponent) root).setToolTipText(text);
+        }
+        for (Component child : root.getComponents()) {
+            if (child instanceof Container) {
+                applyTooltip((Container) child, text);
+            }
+        }
     }
 
     /**
