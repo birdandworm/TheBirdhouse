@@ -42,6 +42,9 @@ public class BirdhousePanel extends PluginPanel {
     // heartbeats every five minutes, so a faster poll would return the same answer.
     private static final int PRESENCE_POLL_SECONDS = 60;
     private static final int PRESENCE_POLL_IDLE_SECONDS = 300;
+    // Shown by both team views while the client sits at the login screen, in place of a
+    // loading message that would otherwise never resolve.
+    private static final String WAITING_FOR_LOGIN = "Waiting for you to log in to the game.";
 
     private final BirdhouseConfig config;
     private final DropMatcher dropMatcher;
@@ -427,9 +430,17 @@ public class BirdhousePanel extends PluginPanel {
             return;
         }
 
-        // Deliberately leaves whatever thread is already drawn on screen: logging out is
-        // not a reason to take the conversation away from someone still reading it.
         if (!loggedIn()) {
+            // Whatever thread is already drawn stays put: logging out is not a reason to
+            // take the conversation away from someone still reading it. An empty panel has
+            // nothing worth keeping though, and sitting on "Loading" with no end in sight
+            // reads as broken rather than waiting.
+            if (lastChat == null) {
+                chatPanel.setUnavailable(WAITING_FOR_LOGIN);
+                if (boardWindow != null && boardWindow.isDisplayable()) {
+                    boardWindow.showChatNote(WAITING_FOR_LOGIN);
+                }
+            }
             scheduleNextChatRefresh(CHAT_POLL_IDLE_SECONDS);
             return;
         }
@@ -512,6 +523,12 @@ public class BirdhousePanel extends PluginPanel {
         // Nothing to report while logged out, and the server would not report us as
         // online either, so this is the one place where backing off loses nothing at all.
         if (!loggedIn()) {
+            if (lastPresence == null) {
+                teamStatusPanel.showNote(WAITING_FOR_LOGIN, null);
+                if (boardWindow != null && boardWindow.isDisplayable()) {
+                    boardWindow.showPresenceNote(WAITING_FOR_LOGIN);
+                }
+            }
             scheduleNextPresenceRefresh(PRESENCE_POLL_IDLE_SECONDS);
             return;
         }

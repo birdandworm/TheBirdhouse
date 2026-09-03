@@ -213,6 +213,16 @@ class BirdhouseBoardWindow extends JFrame {
         statusPanel.setPresence(presence);
     }
 
+    /** A plain message in place of the thread, mirroring whatever the sidebar decided. */
+    void showChatNote(String message) {
+        chatPanel.setUnavailable(message);
+    }
+
+    /** A plain message in place of the roster, mirroring the sidebar. */
+    void showPresenceNote(String message) {
+        statusPanel.showNote(message, null);
+    }
+
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(ColorScheme.DARK_GRAY_COLOR);

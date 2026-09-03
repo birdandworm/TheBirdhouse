@@ -4,8 +4,10 @@ import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.WorldChanged;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -30,6 +32,9 @@ public class BirdhousePlugin extends Plugin {
 
     @Inject
     private Client client;
+
+    @Inject
+    private ClientThread clientThread;
 
     @Inject
     private BirdhouseConfig config;
@@ -109,8 +114,13 @@ public class BirdhousePlugin extends Plugin {
 
         birdhousePanel.startAutoRefresh();
 
-        if (config.trackActivity() && client.getGameState() == GameState.LOGGED_IN) {
-            sessionTracker.startSession(client.getLocalPlayer().getName());
+        // Same guard as the login handler, and the same reason: a plugin restarted while
+        // the player is already in game gets no LOGGED_IN event to lean on. Status
+        // sharing is included because it rides on the session write too, so without it
+        // switching the plugin off and on left a sharer looking like they had opted out.
+        if ((config.trackActivity() || config.showTeamStatus())
+            && client.getGameState() == GameState.LOGGED_IN) {
+            startSessionWhenPlayerLoads();
         }
 
         if (client.getGameState() == GameState.LOGGED_IN) {
@@ -136,13 +146,12 @@ public class BirdhousePlugin extends Plugin {
     @Subscribe
     public void onGameStateChanged(GameStateChanged event) {
         if (event.getGameState() == GameState.LOGGED_IN) {
-            String playerName = client.getLocalPlayer().getName();
             String token = config.authToken();
             if (token != null) {
                 token = token.trim();
             }
             apiClient.setAuthToken(token);
-            log.info("[Birdhouse] Login detected for '{}', token present: {}", playerName, token != null && !token.isEmpty());
+            log.info("[Birdhouse] Login detected, token present: {}", token != null && !token.isEmpty());
 
             // The inventory diff is meaningless across a login, so start from a clean slate.
             clueTracker.reset();
@@ -155,12 +164,38 @@ public class BirdhousePlugin extends Plugin {
             // Team status is carried by the session write, so it needs a session even
             // for a player who has playtime tracking switched off.
             if (config.trackActivity() || config.showTeamStatus()) {
-                sessionTracker.setWorld(client.getWorld());
-                sessionTracker.startSession(playerName);
+                startSessionWhenPlayerLoads();
             }
         } else if (event.getGameState() == GameState.LOGIN_SCREEN) {
             sessionTracker.endSession();
         }
+    }
+
+    /**
+     * Start a session once the client can say who we are.
+     *
+     * The local player is not populated at the instant LOGGED_IN fires, so reading a name
+     * straight out of the event threw and abandoned the rest of the handler. Everything
+     * after it went with it: the board never loaded on login, no session was opened, and
+     * the chat and team status polls were never nudged, so both panels sat on "Loading"
+     * until their five-minute retry came round.
+     *
+     * Returning false asks the client thread to try again on the next tick.
+     */
+    private void startSessionWhenPlayerLoads() {
+        clientThread.invokeLater(() -> {
+            if (client.getGameState() != GameState.LOGGED_IN) {
+                // Logged out again before the player loaded; nothing left to start.
+                return true;
+            }
+            Player me = client.getLocalPlayer();
+            if (me == null || me.getName() == null) {
+                return false;
+            }
+            sessionTracker.setWorld(client.getWorld());
+            sessionTracker.startSession(me.getName());
+            return true;
+        });
     }
 
     /**
