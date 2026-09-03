@@ -7,6 +7,7 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.WidgetID;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
@@ -34,6 +35,9 @@ public class AchievementTracker {
 
     @Inject
     private Client client;
+
+    @Inject
+    private ClientThread clientThread;
 
     @Inject
     private BirdhouseConfig config;
@@ -182,32 +186,38 @@ public class AchievementTracker {
         payload.setQuantity(1);
         payload.setTimestamp(System.currentTimeMillis());
 
+        String confirmation = "[Birdhouse] Achievement matched: " + tile.getName()
+            + " (" + achievementName + ")";
+
         if (config.includeScreenshot()) {
             screenshotHelper.captureAsync(screenshot -> {
                 apiClient.submitProof(payload, screenshot).thenAccept(result -> {
-                    if (result.isOk() && !result.isDuplicate() && config.notifyOnSubmit()) {
-                        client.addChatMessage(
-                            ChatMessageType.GAMEMESSAGE,
-                            "",
-                            "[Birdhouse] Achievement matched: " + tile.getName() + " (" + achievementName + ")",
-                            ""
-                        );
+                    if (result.isOk() && !result.isDuplicate()) {
+                        notifyInGame(confirmation);
                     }
                 });
             });
         } else {
             apiClient.submitProof(payload, null).thenAccept(result -> {
-                if (result.isOk() && !result.isDuplicate() && config.notifyOnSubmit()) {
-                    client.addChatMessage(
-                        ChatMessageType.GAMEMESSAGE,
-                        "",
-                        "[Birdhouse] Achievement matched: " + tile.getName() + " (" + achievementName + ")",
-                        ""
-                    );
+                if (result.isOk() && !result.isDuplicate()) {
+                    notifyInGame(confirmation);
                 }
             });
         }
 
         log.info("Achievement matched tile '{}': {} ({})", tile.getName(), achievementName, achievementType);
+    }
+
+    /**
+     * Confirmation in the game chat that an achievement went in.
+     *
+     * Handed to the client thread because this runs in the submit callback, on an HTTP
+     * thread, and addChatMessage does nothing from off the client thread.
+     */
+    private void notifyInGame(String message) {
+        if (!config.notifyOnSubmit()) {
+            return;
+        }
+        clientThread.invoke(() -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, ""));
     }
 }

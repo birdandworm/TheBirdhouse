@@ -1,8 +1,10 @@
 package com.thebirdhouse.plugin;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.ItemComposition;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
@@ -23,6 +25,9 @@ public class DropMatcher {
 
     @Inject
     private Client client;
+
+    @Inject
+    private ClientThread clientThread;
 
     @Inject
     private ItemManager itemManager;
@@ -264,8 +269,11 @@ public class DropMatcher {
     }
 
     private void warnNotStarted(TileMatch match, String itemName) {
+        // Straight through rather than via notifyInGame: this runs inside the loot
+        // handler, so it is already on the client thread, and a warning that a drop was
+        // not submitted should not be silenced by the submit-confirmation setting.
         client.addChatMessage(
-            net.runelite.api.ChatMessageType.GAMEMESSAGE,
+            ChatMessageType.GAMEMESSAGE,
             "",
             "[Birdhouse] Event not started yet \u2014 screenshot this drop (" + itemName
                 + ") so it can be submitted after the board is locked!",
@@ -321,18 +329,28 @@ public class DropMatcher {
         apiClient.submitProof(payload, screenshot).thenAccept(result -> {
             if (result.isOk()) {
                 log.info("[Birdhouse] Proof submitted successfully for '{}'", match.getTileName());
-                if (config.notifyOnSubmit() && !result.isDuplicate()) {
-                    client.addChatMessage(
-                        net.runelite.api.ChatMessageType.GAMEMESSAGE,
-                        "",
-                        "[Birdhouse] Proof submitted: " + match.getTileName() + " (" + itemName + ")",
-                        ""
-                    );
+                if (!result.isDuplicate()) {
+                    notifyInGame("[Birdhouse] Proof submitted: " + match.getTileName() + " (" + itemName + ")");
                 }
                 overlay.setLastMatch(match.getTileName(), itemName);
             } else {
                 log.warn("[Birdhouse] Proof submission FAILED for '{}': {}", match.getTileName(), result.getMessage());
             }
         });
+    }
+
+    /**
+     * Confirmation in the game chat that a drop went in.
+     *
+     * Has to be handed to the client thread. This runs in the submit callback, on an
+     * HTTP thread, and addChatMessage from off the client thread does nothing — which
+     * is why an automatic submission stayed silent while a manual one from the board
+     * window, which already routed through clientThread, printed its line.
+     */
+    private void notifyInGame(String message) {
+        if (!config.notifyOnSubmit()) {
+            return;
+        }
+        clientThread.invoke(() -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, ""));
     }
 }
