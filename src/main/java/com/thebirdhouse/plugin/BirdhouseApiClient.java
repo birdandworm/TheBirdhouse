@@ -394,12 +394,17 @@ public class BirdhouseApiClient {
 
     /**
      * Report a session event (login/logout/heartbeat).
+     *
+     * Still fire-and-forget — failures are swallowed and the next heartbeat re-sends —
+     * but the future is returned so a caller can wait for the write to land. Team status
+     * needs that: it reads presence back from the server, so refreshing it before our own
+     * login has been reported just re-reads the state we are trying to change.
      */
-    public void reportSession(SessionEvent event) {
+    public CompletableFuture<Void> reportSession(SessionEvent event) {
         if (!hasAuthToken()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
-        CompletableFuture.runAsync(() -> {
+        return CompletableFuture.runAsync(() -> {
             try {
                 Request request = new Request.Builder()
                     .url(BASE_URL + "/session")

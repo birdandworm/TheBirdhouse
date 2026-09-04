@@ -37,10 +37,14 @@ public class BirdhousePanel extends PluginPanel {
     // room that has no thread at all.
     private static final int CHAT_POLL_IDLE_SECONDS = 300;
     private static final int CHAT_PANEL_HEIGHT = 190;
-    // Status is polled far slower than chat and has no knob, because there is nothing to
-    // gain: the client reports its own world the moment it hops, and otherwise only
-    // heartbeats every five minutes, so a faster poll would return the same answer.
-    private static final int PRESENCE_POLL_SECONDS = 60;
+    // Slower than chat and with no knob, but not as slow as it was. The old 60s was
+    // argued for on the grounds that a faster poll would return the same answer, since a
+    // client only heartbeats every five minutes. That is true of the steady state and
+    // wrong about the interesting one: a login or a logout is reported the moment it
+    // happens, so the poll interval was the whole of the delay before a teammate
+    // appeared or went. Affordable at this rate for the same reason chat is — the cache
+    // host answers from a live listener, so a poll costs no database read.
+    private static final int PRESENCE_POLL_SECONDS = 20;
     private static final int PRESENCE_POLL_IDLE_SECONDS = 300;
     // Shown by both team views while the client sits at the login screen, in place of a
     // loading message that would otherwise never resolve.
@@ -644,6 +648,22 @@ public class BirdhousePanel extends PluginPanel {
         SwingUtilities.invokeLater(() -> {
             scheduleNextChatRefresh(0);
             scheduleNextPresenceRefresh(0);
+        });
+    }
+
+    /**
+     * Re-read the team roster now, because something we did has changed what it will say.
+     *
+     * Called once our own session write has landed. The refresh on the login event above
+     * cannot cover this: it runs before the write, which waits for the client to be able
+     * to name the local player and then goes out asynchronously, so it read us as still
+     * offline and left us looking that way until the next poll.
+     */
+    public void onSessionReported() {
+        SwingUtilities.invokeLater(() -> {
+            if (config.showTeamStatus()) {
+                scheduleNextPresenceRefresh(0);
+            }
         });
     }
 

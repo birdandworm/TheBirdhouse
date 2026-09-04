@@ -46,6 +46,27 @@ public class SessionTracker {
     private String currentPlayer;
     private long sessionStart;
 
+    /**
+     * Notified once the server has actually been told about a session change.
+     *
+     * The team status panel does not know its own state — it reads presence back from the
+     * server. So it cannot be refreshed on the login event: the login write goes out a
+     * few ticks later, once the client can say who we are, and asynchronously after that.
+     * Refreshing any earlier re-reads exactly the state we are about to change, and the
+     * panel then showed us offline until the next poll came round.
+     */
+    private volatile Runnable onReported = () -> {};
+
+    /** Pushed in by the plugin, which owns the panel this has no business knowing about. */
+    public void setSessionReportedListener(Runnable listener) {
+        onReported = listener != null ? listener : () -> {};
+    }
+
+    private void report(SessionEvent e) {
+        Runnable listener = onReported;
+        apiClient.reportSession(e).thenRun(listener);
+    }
+
     // Pushed in from the plugin's event handlers rather than read from the client here,
     // because the heartbeat runs on this scheduler thread and reading client state off
     // the client thread is exactly the kind of thing that works until it doesn't.
@@ -97,7 +118,7 @@ public class SessionTracker {
         if (name == null) {
             return;
         }
-        scheduler.execute(() -> apiClient.reportSession(event("heartbeat", name, System.currentTimeMillis())));
+        scheduler.execute(() -> report(event("heartbeat", name, System.currentTimeMillis())));
     }
 
     public void startSession(String playerName) {
@@ -113,8 +134,11 @@ public class SessionTracker {
         // Start each session with a clean activity slate so nothing carries over.
         activityTracker.reset();
 
-        apiClient.reportSession(event("login", playerName, sessionStart));
+        report(event("login", playerName, sessionStart));
 
+        // The periodic heartbeat deliberately does not notify: it repeats a state the
+        // panel has already read, so waking the poll for it would be a request per beat
+        // that can only ever confirm what is on screen.
         heartbeatTask = scheduler.scheduleAtFixedRate(
             () -> apiClient.reportSession(event("heartbeat", playerName, System.currentTimeMillis())),
             HEARTBEAT_INTERVAL_MS,
@@ -150,7 +174,7 @@ public class SessionTracker {
         long duration = System.currentTimeMillis() - sessionStart;
         SessionEvent event = event("logout", currentPlayer, System.currentTimeMillis());
         event.setDurationMs(duration);
-        apiClient.reportSession(event);
+        report(event);
 
         log.info("Session ended for {} ({}m)", currentPlayer, duration / 60000);
         currentPlayer = null;

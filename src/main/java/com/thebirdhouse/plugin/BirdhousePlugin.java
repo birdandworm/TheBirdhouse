@@ -112,6 +112,10 @@ public class BirdhousePlugin extends Plugin {
             .build();
         clientToolbar.addNavigation(navButton);
 
+        // The tracker owns the write that decides what team status shows, so the panel
+        // waits on it rather than on the login event that precedes it.
+        sessionTracker.setSessionReportedListener(birdhousePanel::onSessionReported);
+
         birdhousePanel.startAutoRefresh();
 
         // Same guard as the login handler, and the same reason: a plugin restarted while
@@ -141,6 +145,9 @@ public class BirdhousePlugin extends Plugin {
         birdhousePanel.stopAutoRefresh();
         birdhousePanel.shutdown();
         sessionTracker.endSession();
+        // After endSession, which still wants to report the logout. The tracker outlives
+        // the plugin's panel, so it must not be left holding it.
+        sessionTracker.setSessionReportedListener(null);
     }
 
     @Subscribe
