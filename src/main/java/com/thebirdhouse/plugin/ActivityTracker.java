@@ -57,17 +57,6 @@ public class ActivityTracker {
         "Gauntlet", "Crystalline Hunllef"
     );
 
-    // Mirrors RuneLite's own ChatCommandsPlugin killcount pattern, which has absorbed
-    // years of per-boss phrasing quirks ("subdued", "completion count for", raid
-    // "completed" counts). The trailing colour tag is optional only so the pattern stays
-    // testable against plain strings.
-    private static final Pattern KILLCOUNT_PATTERN = Pattern.compile(
-        "Your (?:completion count for |subdued |completed )?(?:<col=[0-9a-f]{6}>)?"
-            + "(?<boss>.+?)(?:</col>)? "
-            + "(?:(?:kill|harvest|lap|completion|success) )?(?:count )?"
-            + "is: ?(?:<col=[0-9a-f]{6}>)?(?<kc>[0-9,]+)"
-    );
-
     @Inject
     private Client client;
 
@@ -193,12 +182,12 @@ public class ActivityTracker {
         if (!config.contributeActivityStats()) return;
         if (event.getType() != ChatMessageType.GAMEMESSAGE && event.getType() != ChatMessageType.SPAM) return;
 
-        Matcher matcher = KILLCOUNT_PATTERN.matcher(event.getMessage());
-        if (!matcher.find()) return;
+        String boss = KillCounts.bossFrom(event.getMessage());
+        if (boss == null) return;
 
         // Only the sources held back in onLootReceived are credited here. Every other boss
         // was already counted from its loot, and counting it again would double it.
-        String source = KC_CONFIRMED_SOURCES.get(matcher.group("boss"));
+        String source = KC_CONFIRMED_SOURCES.get(boss);
         if (source == null) return;
 
         markActive();

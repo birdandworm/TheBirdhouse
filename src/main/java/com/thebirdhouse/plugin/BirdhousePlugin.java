@@ -58,6 +58,9 @@ public class BirdhousePlugin extends Plugin {
     private GatheredTracker gatheredTracker;
 
     @Inject
+    private KillCountTracker killCountTracker;
+
+    @Inject
     private ClanLootReporter clanLootReporter;
 
     @Inject
@@ -89,6 +92,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.register(activityTracker);
         eventBus.register(clueTracker);
         eventBus.register(gatheredTracker);
+        eventBus.register(killCountTracker);
         eventBus.register(clanLootReporter);
 
         String token = config.authToken();
@@ -144,6 +148,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.unregister(activityTracker);
         eventBus.unregister(clueTracker);
         eventBus.unregister(gatheredTracker);
+        eventBus.unregister(killCountTracker);
         eventBus.unregister(clanLootReporter);
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
@@ -168,6 +173,7 @@ public class BirdhousePlugin extends Plugin {
             // The inventory diff is meaningless across a login, so start from a clean slate.
             clueTracker.reset();
             gatheredTracker.reset();
+            killCountTracker.reset();
             loadBoard();
 
             // The chat and status polls back off while logged out, so they are nudged

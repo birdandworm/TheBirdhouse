@@ -173,6 +173,81 @@ public class DropMatcher {
         submitMatch(match, source, itemName, quantity, itemId);
     }
 
+    /**
+     * A kill the game announced in chat — see {@link KillCountTracker}.
+     *
+     * Only kill-count tiles are eligible, so this cannot be reused to satisfy a tile that
+     * wants a specific item. There is no drop to name, so the boss stands in as the item
+     * for the log line; the server forces a quantity of one on these regardless.
+     */
+    public void handleKillCount(String bossName) {
+        if (!config.autoSubmitDrops()) return;
+        if (activeBoard == null || isEventOver()) return;
+        if (bossName == null || bossName.isEmpty()) return;
+
+        List<TileMatch> matches = findKillCountMatches(bossName);
+        if (matches.isEmpty()) return;
+
+        TileMatch match = matches.get(0);
+        if (Boolean.FALSE.equals(activeBoard.getStarted())) {
+            warnNotStarted(match, bossName);
+            return;
+        }
+        submitMatch(match, bossName, bossName, 1, -1);
+    }
+
+    /**
+     * Tiles still accepting submissions.
+     *
+     * Shared by every matching path so that a tile which is finished, fogged, not the one
+     * the piece is standing on, or otherwise closed stays closed no matter which signal
+     * arrived.
+     */
+    private boolean tileOpen(BoardTile tile) {
+        if (tile.isCompleted()) return false;
+        if (tile.getSpecial() != null) return false;
+
+        // Skip tiles that already have enough submissions (even if not yet marked complete)
+        if (tile.getQuantity() > 1 && tile.getCurrentQty() >= tile.getQuantity()) return false;
+
+        // For battleship, skip tiles that already have an attack result (hit, miss, or sunk)
+        if ("battleship".equals(tile.getGameType()) && tile.getAttackResult() != null) return false;
+
+        // For tile race, only match the tile the player is currently on
+        if ("tilerace".equals(tile.getGameType()) && !tile.isCurrent()) return false;
+
+        // For chip drop, only match available (unlocked) tiles
+        if ("chipdrop".equals(tile.getGameType()) && !tile.isAvailable()) return false;
+
+        return true;
+    }
+
+    /**
+     * Kill-count tiles naming this boss.
+     *
+     * Deliberately not routed through {@link #matchesTile}, which would also accept a
+     * tile whose wanted item happens to share the boss's name. A killcount message is
+     * proof of a kill and nothing else.
+     */
+    private List<TileMatch> findKillCountMatches(String bossName) {
+        List<TileMatch> matches = new ArrayList<>();
+        if (activeBoard == null || activeBoard.getTiles() == null) {
+            return matches;
+        }
+
+        String boss = bossName.toLowerCase().trim();
+        for (BoardTile tile : activeBoard.getTiles()) {
+            if (!tileOpen(tile)) continue;
+            if (!tile.isAnyUnique()) continue;
+
+            String target = tile.getMatchName();
+            if (target == null || !target.toLowerCase().trim().equals(boss)) continue;
+
+            matches.add(new TileMatch(tile.getKey(), tile.getName(), tile.getGameType(), tile.getTerritoryName()));
+        }
+        return matches;
+    }
+
     private List<TileMatch> findMatches(String npcName, String itemName, int quantity) {
         List<TileMatch> matches = new ArrayList<>();
         if (activeBoard == null || activeBoard.getTiles() == null) {
@@ -180,20 +255,7 @@ public class DropMatcher {
         }
 
         for (BoardTile tile : activeBoard.getTiles()) {
-            if (tile.isCompleted()) continue;
-            if (tile.getSpecial() != null) continue;
-
-            // Skip tiles that already have enough submissions (even if not yet marked complete)
-            if (tile.getQuantity() > 1 && tile.getCurrentQty() >= tile.getQuantity()) continue;
-
-            // For battleship, skip tiles that already have an attack result (hit, miss, or sunk)
-            if ("battleship".equals(tile.getGameType()) && tile.getAttackResult() != null) continue;
-
-            // For tile race, only match the tile the player is currently on
-            if ("tilerace".equals(tile.getGameType()) && !tile.isCurrent()) continue;
-
-            // For chip drop, only match available (unlocked) tiles
-            if ("chipdrop".equals(tile.getGameType()) && !tile.isAvailable()) continue;
+            if (!tileOpen(tile)) continue;
 
             if (matchesTile(tile, npcName, itemName)) {
                 matches.add(new TileMatch(tile.getKey(), tile.getName(), tile.getGameType(), tile.getTerritoryName()));
@@ -340,6 +402,8 @@ public class DropMatcher {
 
     /** Grand Exchange value of a whole stack; 0 for untradeables and unknown ids. */
     private long stackValue(int itemId, int quantity) {
+        // A kill credit has no item behind it, so there is nothing to price.
+        if (itemId <= 0) return 0;
         try {
             int price = itemManager.getItemPrice(itemId);
             return (long) Math.max(0, price) * Math.max(0, quantity);
