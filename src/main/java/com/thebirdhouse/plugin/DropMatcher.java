@@ -149,6 +149,30 @@ public class DropMatcher {
         }
     }
 
+    /**
+     * An item that reached the inventory without a loot event — see {@link GatheredTracker}.
+     *
+     * Routed through the matching and submission path a drop takes rather than a parallel
+     * one, so every per-game-type rule, quantity cap and not-started warning applies
+     * identically. {@code source} names the activity ("Mining") where a drop would name
+     * the NPC; a kill-count tile matches on that field and so can never be satisfied by
+     * one of these, which is correct.
+     */
+    public void handleGatheredItem(String source, String itemName, int itemId, int quantity) {
+        if (!config.autoSubmitDrops()) return;
+        if (activeBoard == null || isEventOver()) return;
+
+        List<TileMatch> matches = findMatches(source, itemName, quantity);
+        if (matches.isEmpty()) return;
+
+        TileMatch match = matches.get(0);
+        if (Boolean.FALSE.equals(activeBoard.getStarted())) {
+            warnNotStarted(match, itemName);
+            return;
+        }
+        submitMatch(match, source, itemName, quantity, itemId);
+    }
+
     private List<TileMatch> findMatches(String npcName, String itemName, int quantity) {
         List<TileMatch> matches = new ArrayList<>();
         if (activeBoard == null || activeBoard.getTiles() == null) {

@@ -68,6 +68,21 @@ public interface BirdhouseConfig extends Config {
     }
 
     @ConfigItem(
+        keyName = "autoSubmitGathered",
+        name = "Auto-Submit Skilling Finds",
+        description =
+            "Also submit board items that arrive from skilling rather than from a kill or a chest — "
+                + "a stardust off a shooting star, a pearl from aerial fishing, a salamander out of a trap. "
+                + "Only counts items your board actually asks for, and only when you were earning experience "
+                + "at the time, so anything withdrawn, bought or traded for is ignored.",
+        section = dropsSection,
+        position = 4
+    )
+    default boolean autoSubmitGathered() {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "notifyOnSubmit",
         name = "Chat Notification",
         description = "Show a game chat message when a proof is submitted",
