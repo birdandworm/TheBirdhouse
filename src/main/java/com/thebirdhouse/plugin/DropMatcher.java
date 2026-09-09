@@ -14,6 +14,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Matches received drops against the player's active board tiles.
@@ -123,6 +124,11 @@ public class DropMatcher {
 
         log.info("[Birdhouse] Loot received from '{}' (type={}): {} items", sourceName, event.getType(), event.getItems().size());
 
+        // One drop, however many items are in it. A kill-count tile counts kills but this
+        // loop submits per item, so the backend needs to know which submissions shared a
+        // kill; see ProofPayload#killId.
+        String killId = UUID.randomUUID().toString();
+
         for (ItemStack itemStack : event.getItems()) {
             ItemComposition itemComp = itemManager.getItemComposition(itemStack.getId());
             String itemName = itemComp.getName();
@@ -143,7 +149,7 @@ public class DropMatcher {
                     log.info("[Birdhouse]   Event not started — not submitting '{}', warning player to screenshot", itemName);
                     warnNotStarted(match, itemName);
                 } else {
-                    submitMatch(match, sourceName, itemName, quantity, itemStack.getId());
+                    submitMatch(match, sourceName, itemName, quantity, itemStack.getId(), killId);
                 }
             }
         }
@@ -170,7 +176,8 @@ public class DropMatcher {
             warnNotStarted(match, itemName);
             return;
         }
-        submitMatch(match, source, itemName, quantity, itemId);
+        // No killId: nothing was killed, so there are no sibling rolls to collapse.
+        submitMatch(match, source, itemName, quantity, itemId, null);
     }
 
     /**
@@ -193,7 +200,8 @@ public class DropMatcher {
             warnNotStarted(match, bossName);
             return;
         }
-        submitMatch(match, bossName, bossName, 1, -1);
+        // One announcement is one kill, so this is the only submission carrying this id.
+        submitMatch(match, bossName, bossName, 1, -1, UUID.randomUUID().toString());
     }
 
     /**
@@ -368,7 +376,8 @@ public class DropMatcher {
         overlay.setLastMatch(match.getTileName() + " (not started \u2014 screenshot!)", itemName);
     }
 
-    private void submitMatch(TileMatch match, String npcName, String itemName, int quantity, int itemId) {
+    /** @param killId the kill these items came from, or null when this is not a kill. */
+    private void submitMatch(TileMatch match, String npcName, String itemName, int quantity, int itemId, String killId) {
         String playerName = client.getLocalPlayer().getName();
 
         ProofPayload payload = new ProofPayload();
@@ -384,6 +393,7 @@ public class DropMatcher {
         payload.setItemId(itemId);
         payload.setValue(stackValue(itemId, quantity));
         payload.setTimestamp(System.currentTimeMillis());
+        payload.setKillId(killId);
 
         if (config.includeScreenshot()) {
             screenshotHelper.captureAsync(screenshot -> {

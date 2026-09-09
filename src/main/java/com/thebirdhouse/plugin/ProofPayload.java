@@ -27,4 +27,12 @@ public class ProofPayload {
     // routes these to admin review instead of auto-approving them, because nothing
     // witnessed the drop.
     private boolean manual;
+    // Identifies the single kill this proof came out of, shared by every item in the same
+    // drop. A kill-count tile counts kills, but the plugin submits per item, so Zulrah
+    // handing over four things at once would otherwise read as four kills. The backend
+    // used to collapse those by ignoring repeats within ten seconds, which also swallowed
+    // genuine kills of anything that dies faster than that. Matching on this instead
+    // collapses exactly the rolls that shared a kill and nothing else. Null for gathered
+    // items, which are not kills.
+    private String killId;
 }
