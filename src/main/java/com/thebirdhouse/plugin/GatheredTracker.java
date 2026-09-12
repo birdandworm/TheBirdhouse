@@ -19,6 +19,7 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -96,6 +97,29 @@ public class GatheredTracker {
 
     private static final int RECENT_TICKS = 1;
 
+    /**
+     * Containers whose movement means an item changed hands rather than being gathered.
+     *
+     * A withdrawal, a completed trade and a collected offer each move one of these in the
+     * same tick as the inventory, which is far more direct evidence than the experience
+     * anchor ever was. Shops are left out deliberately: the game has a separate container
+     * per shop and there are several hundred of them, and a shop is not somewhere anyone
+     * trains, so the exposure does not justify guessing at that list.
+     */
+    private static final Set<Integer> VAULTS;
+
+    static {
+        Set<Integer> vaults = new HashSet<>(Arrays.asList(
+            InventoryID.BANK, InventoryID.TRADEOFFER, InventoryID.DUELOFFER
+        ));
+        vaults.addAll(Arrays.asList(
+            InventoryID.GE_OFFER_0, InventoryID.GE_OFFER_1, InventoryID.GE_OFFER_2,
+            InventoryID.GE_OFFER_3, InventoryID.GE_OFFER_4, InventoryID.GE_OFFER_5,
+            InventoryID.GE_OFFER_6, InventoryID.GE_OFFER_7
+        ));
+        VAULTS = vaults;
+    }
+
     @Inject
     private Client client;
 
@@ -130,6 +154,17 @@ public class GatheredTracker {
      */
     private final Map<Skill, Integer> lastXp = new EnumMap<>(Skill.class);
     private int lastTakeTick = Integer.MIN_VALUE;
+
+    /**
+     * When a bank, trade or shop last moved, so goods changing hands can be told from a
+     * gather.
+     *
+     * The experience anchor was meant to carry this on its own, on the reasoning that a
+     * withdrawal earns none. That holds for mining and fishing, but Herblore, Crafting,
+     * Construction and Runecraft are trained standing at a bank, so their experience is
+     * arriving continuously at the exact moment withdrawals happen.
+     */
+    private int lastVaultTick = Integer.MIN_VALUE;
     private int lastLootTick = Integer.MIN_VALUE;
     private Set<String> lastLootItems = new HashSet<>();
 
@@ -157,6 +192,7 @@ public class GatheredTracker {
         lastEarnSkill = null;
         lastXp.clear();
         lastTakeTick = Integer.MIN_VALUE;
+        lastVaultTick = Integer.MIN_VALUE;
         lastLootTick = Integer.MIN_VALUE;
         lastLootItems = new HashSet<>();
         pending.clear();
@@ -203,6 +239,10 @@ public class GatheredTracker {
 
     @Subscribe
     public void onItemContainerChanged(ItemContainerChanged event) {
+        if (VAULTS.contains(event.getContainerId())) {
+            lastVaultTick = client.getTickCount();
+            return;
+        }
         if (event.getContainerId() != InventoryID.INV) return;
 
         Map<Integer, Integer> current = snapshot(event.getItemContainer());
@@ -250,6 +290,14 @@ public class GatheredTracker {
 
         if (!inTrackedRoom()) return;
 
+        // Asked here rather than as the change arrives, for the same reason the loot
+        // tracker is: the order two container subscribers run in is undefined, so the
+        // bank may not have reported yet at the moment the inventory does.
+        if (changedHands(found, lastVaultTick)) {
+            log.debug("[Birdhouse] Ignoring inventory gain that came out of a bank, trade or shop");
+            return;
+        }
+
         String source = label(skill);
         for (Gain gain : due) {
             if (alreadyReported(gain.name, found, lastLootTick, lastLootItems)) {
@@ -280,6 +328,18 @@ public class GatheredTracker {
     static boolean anchored(int tick, int lastEarnTick) {
         if (lastEarnTick == Integer.MIN_VALUE) return false;
         return tick - lastEarnTick <= ANCHOR_TICKS && tick >= lastEarnTick;
+    }
+
+    /**
+     * Whether a bank, trade or shop moved close enough to have been where the item came
+     * from.
+     *
+     * This is the guard the experience anchor was assumed to provide and does not, since
+     * the production skills are trained at a bank.
+     */
+    static boolean changedHands(int tick, int lastVaultTick) {
+        if (lastVaultTick == Integer.MIN_VALUE) return false;
+        return Math.abs(tick - lastVaultTick) <= RECENT_TICKS;
     }
 
     /** Whether the change is close enough to a Take to have come off the floor. */

@@ -62,6 +62,35 @@ public class GatheredTrackerTest {
         assertFalse(GatheredTracker.anchored(100, Integer.MIN_VALUE));
     }
 
+    // ── Goods changing hands ─────────────────────────────────────────────────────
+
+    @Test
+    public void aWithdrawalAlongsideGatheringExperienceIsRefused() {
+        // Herblore, Crafting, Construction and Runecraft are trained standing at a bank,
+        // so their experience arrives at the exact moment withdrawals do. The anchor
+        // cannot separate those two; the bank moving is what says which one happened.
+        assertTrue(GatheredTracker.changedHands(100, 100));
+    }
+
+    @Test
+    public void theBankIsAllowedToReportEitherSideOfTheInventory() {
+        // Two container subscribers run in an undefined order, so the bank may report the
+        // tick before or the tick after the inventory it emptied into.
+        assertTrue(GatheredTracker.changedHands(100, 99));
+        assertTrue(GatheredTracker.changedHands(100, 101));
+    }
+
+    @Test
+    public void aBankOpenedEarlierDoesNotTaintALaterGather() {
+        assertFalse(GatheredTracker.changedHands(100, 98));
+        assertFalse(GatheredTracker.changedHands(500, 100));
+    }
+
+    @Test
+    public void neverHavingBankedRefusesNothing() {
+        assertFalse(GatheredTracker.changedHands(100, Integer.MIN_VALUE));
+    }
+
     // ── What counts as experience ────────────────────────────────────────────────
 
     @Test
