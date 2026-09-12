@@ -98,7 +98,7 @@ public class BirdhouseApiClient {
      * Treating any 2xx as acceptance would tell a player their manual submission landed
      * when the server actually threw it away.
      */
-    private ProofResult interpretProofResponse(int code, String body) {
+    ProofResult interpretProofResponse(int code, String body) {
         JsonObject json = null;
         try {
             if (body != null && !body.isEmpty()) {
@@ -128,7 +128,16 @@ public class BirdhouseApiClient {
         if (json != null && json.has("success") && !json.get("success").getAsBoolean()) {
             return ProofResult.rejected(reason != null ? reason : "The server rejected this proof");
         }
-        return ProofResult.accepted();
+        int kills = 0;
+        if (json != null && json.has("kills")) {
+            try {
+                kills = json.get("kills").getAsInt();
+            } catch (RuntimeException e) {
+                // An older or stranger server; the tile just keeps screenshotting.
+                kills = 0;
+            }
+        }
+        return ProofResult.accepted(kills);
     }
 
     /**

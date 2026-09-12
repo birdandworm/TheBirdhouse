@@ -16,15 +16,28 @@ public class ProofResult {
     boolean duplicate;
     String message;
 
+    /**
+     * Kills banked on this tile so far, or 0 when the submission was not a kill.
+     *
+     * A kill-count tile keeps one proof per player and counts up, rather than filing a
+     * proof per kill, so only the first kill's screenshot is worth anything. This is how
+     * the client learns a tally is open and stops capturing for that tile.
+     */
+    int kills;
+
     static ProofResult accepted() {
-        return new ProofResult(true, false, null);
+        return new ProofResult(true, false, null, 0);
+    }
+
+    static ProofResult accepted(int kills) {
+        return new ProofResult(true, false, null, kills);
     }
 
     static ProofResult duplicate(String message) {
-        return new ProofResult(true, true, message);
+        return new ProofResult(true, true, message, 0);
     }
 
     static ProofResult rejected(String message) {
-        return new ProofResult(false, false, message);
+        return new ProofResult(false, false, message, 0);
     }
 }

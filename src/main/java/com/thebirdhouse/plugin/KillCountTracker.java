@@ -26,11 +26,11 @@ import java.util.Map;
  * That announcement is the signal used here. The same message already confirms kills for
  * the leaderboard, so the pattern is shared rather than rewritten.
  *
- * Most bosses announce a count *and* drop loot, which would credit the tile twice. Two
- * things prevent it. A credit is held for a tick and dropped if the loot tracker named
- * the same source, which covers the ordinary case without a wasted upload; and the server
- * collapses repeat kill credits on a tile inside a ten-second window, which catches
- * anything the client's view misses.
+ * Most bosses announce a count *and* drop loot, which would credit the tile twice. A
+ * credit is held for a tick and dropped if the loot tracker named the same source, which
+ * covers the ordinary case without a wasted upload. Nothing behind that catches what this
+ * misses: the server collapses the rolls that shared a {@link ProofPayload#killId}, and an
+ * announcement carries an id of its own precisely because it is a separate kill.
  */
 @Slf4j
 @Singleton

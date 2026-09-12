@@ -14,7 +14,9 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Matches received drops against the player's active board tiles.
@@ -48,6 +50,16 @@ public class DropMatcher {
     private BoardData activeBoard;
     private String activeRoomCode;
 
+    /**
+     * Tile keys the server has confirmed are counting kills against a single proof.
+     *
+     * Only the first kill on such a tile keeps a screenshot, so once a tile is in here
+     * the rest are submitted without one. Held per room and rebuilt from the server's
+     * answers, so a stale entry costs at most one saved screenshot and never a lost
+     * proof. Written from HTTP callback threads and read from the client thread.
+     */
+    private final Set<String> tallyTiles = ConcurrentHashMap.newKeySet();
+
     public BoardData getActiveBoard() {
         return activeBoard;
     }
@@ -60,6 +72,11 @@ public class DropMatcher {
     }
 
     public void setActiveRoomCode(String roomCode) {
+        // Tile keys are only unique within a room, so what was a tally in the last one
+        // could silently suppress the first screenshot of a tile in the next.
+        if (roomCode == null || !roomCode.equals(this.activeRoomCode)) {
+            tallyTiles.clear();
+        }
         this.activeRoomCode = roomCode;
     }
 
@@ -89,7 +106,7 @@ public class DropMatcher {
             log.warn("[Birdhouse] loadActiveBoard called with empty roomCode");
             return;
         }
-        this.activeRoomCode = roomCode;
+        setActiveRoomCode(roomCode);
         log.info("[Birdhouse] Loading board for room: {}", roomCode);
         apiClient.fetchBoard(roomCode).thenAccept(board -> {
             if (board != null) {
@@ -395,16 +412,24 @@ public class DropMatcher {
         payload.setTimestamp(System.currentTimeMillis());
         payload.setKillId(killId);
 
-        if (config.includeScreenshot()) {
+        // A tile counting kills keeps one proof and counts up, so only the first kill's
+        // screenshot is ever stored. Capturing the rest is pure waste, and on something
+        // cannoned down several to the tick it is waste at a few frames a second, each
+        // encoded and uploaded. The server says which tiles are running a tally, so this
+        // needs no opinion about what a tile means.
+        if (!config.includeScreenshot()) {
+            log.info("[Birdhouse] Screenshots disabled in config, submitting without image");
+            doSubmit(payload, null, match, itemName);
+        } else if (tallyTiles.contains(match.getTileKey())) {
+            log.debug("[Birdhouse] '{}' is counting kills; skipping the screenshot", match.getTileName());
+            doSubmit(payload, null, match, itemName);
+        } else {
             screenshotHelper.captureAsync(screenshot -> {
                 if (screenshot == null || screenshot.length == 0) {
                     log.warn("[Birdhouse] Screenshot capture returned null/empty for '{}' - submitting without image", match.getTileName());
                 }
                 doSubmit(payload, screenshot, match, itemName);
             });
-        } else {
-            log.info("[Birdhouse] Screenshots disabled in config, submitting without image");
-            doSubmit(payload, null, match, itemName);
         }
 
         log.info("Drop matched tile '{}': {} from {}", match.getTileName(), itemName, npcName);
@@ -427,6 +452,12 @@ public class DropMatcher {
         apiClient.submitProof(payload, screenshot).thenAccept(result -> {
             if (result.isOk()) {
                 log.info("[Birdhouse] Proof submitted successfully for '{}'", match.getTileName());
+                if (result.getKills() > 0) {
+                    // The tile is banking kills against one proof, so from here it needs
+                    // no more pictures. Kills already in flight may take a few more
+                    // before this lands, which costs nothing but a handful of uploads.
+                    tallyTiles.add(match.getTileKey());
+                }
                 if (!result.isDuplicate()) {
                     notifyInGame("[Birdhouse] Proof submitted: " + match.getTileName() + " (" + itemName + ")");
                 }
