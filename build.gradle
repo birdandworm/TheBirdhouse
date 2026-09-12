@@ -27,10 +27,26 @@ dependencies {
 }
 
 group = 'com.thebirdhouse'
-version = '1.4.3'
+version = '1.4.4'
 sourceCompatibility = '11'
 targetCompatibility = '11'
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+}
+
+// Stamp the version above into a resource the plugin can read back at runtime, so every
+// request can say which build it came from. Kept here rather than as a constant in the
+// source because a second hand-maintained copy would drift from this one the first time
+// anybody bumped a release without thinking about it. Scoped with filesMatching so the
+// templating never touches anything else that lands in resources.
+processResources {
+    // Declared as an input because the file's own contents never change — only what gets
+    // substituted into it does. Without this Gradle calls the task up to date on a
+    // version bump and ships the previous number, which is worse than shipping none:
+    // a stale stamp is a confident wrong answer during exactly the diagnosis it exists for.
+    inputs.property('version', project.version)
+    filesMatching('birdhouse.properties') {
+        expand(version: project.version)
+    }
 }

@@ -32,9 +32,21 @@ public class BirdhouseApiClient {
     private final Gson gson;
     private String authToken = "";
 
+    /** Names the build on every request, so a log line can be read without guesswork. */
+    static final String VERSION_HEADER = "X-Birdhouse-Version";
+
     @Inject
     public BirdhouseApiClient(OkHttpClient httpClient, Gson gson) {
-        this.httpClient = httpClient;
+        // Derived rather than added to the injected client, which RuneLite shares with
+        // every other plugin. An interceptor rather than a header on each call: there are
+        // nine of those and the one that gets forgotten is always the one a bug report
+        // turns out to hinge on.
+        this.httpClient = httpClient.newBuilder()
+            .addInterceptor(chain -> chain.proceed(
+                chain.request().newBuilder()
+                    .header(VERSION_HEADER, PluginVersion.VERSION)
+                    .build()))
+            .build();
         this.gson = gson;
     }
 
