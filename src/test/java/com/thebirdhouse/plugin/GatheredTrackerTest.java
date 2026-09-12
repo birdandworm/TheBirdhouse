@@ -62,6 +62,33 @@ public class GatheredTrackerTest {
         assertFalse(GatheredTracker.anchored(100, Integer.MIN_VALUE));
     }
 
+    // ── What counts as experience ────────────────────────────────────────────────
+
+    @Test
+    public void experienceGoingUpVouchesForTheTick() {
+        assertTrue(GatheredTracker.earned(1_000, 1_050));
+    }
+
+    @Test
+    public void aDrainedLevelHealingBackVouchesForNothing() {
+        // Karil drains Agility, so every point that comes back during a Barrows trip
+        // reports a stat change with the experience sitting exactly where it was. Reading
+        // those as gathering is what let a Moons piece arrive labelled "Agility".
+        assertFalse(GatheredTracker.earned(1_000, 1_000));
+    }
+
+    @Test
+    public void aBoostWearingOffVouchesForNothing() {
+        assertFalse(GatheredTracker.earned(1_000, 1_000));
+    }
+
+    @Test
+    public void theFirstSightingOfASkillIsOnlyABaseline() {
+        // Login reports every skill at once. Treating that burst as earning would vouch
+        // for whatever the first inventory change after logging in happened to be.
+        assertFalse(GatheredTracker.earned(null, 13_034_431));
+    }
+
     // ── Ground pickups ───────────────────────────────────────────────────────────
 
     @Test

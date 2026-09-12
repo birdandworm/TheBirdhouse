@@ -19,6 +19,7 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -119,6 +120,15 @@ public class GatheredTracker {
 
     private int lastEarnTick = Integer.MIN_VALUE;
     private Skill lastEarnSkill = null;
+
+    /**
+     * Experience last seen per skill, so a stat change can be read as earning or not.
+     *
+     * A drained level healing back reports as a stat change with the experience sitting
+     * exactly where it was. Karil drains Agility, so a Barrows trip alone fires one of
+     * those every time a point comes back.
+     */
+    private final Map<Skill, Integer> lastXp = new EnumMap<>(Skill.class);
     private int lastTakeTick = Integer.MIN_VALUE;
     private int lastLootTick = Integer.MIN_VALUE;
     private Set<String> lastLootItems = new HashSet<>();
@@ -145,6 +155,7 @@ public class GatheredTracker {
         primed = false;
         lastEarnTick = Integer.MIN_VALUE;
         lastEarnSkill = null;
+        lastXp.clear();
         lastTakeTick = Integer.MIN_VALUE;
         lastLootTick = Integer.MIN_VALUE;
         lastLootItems = new HashSet<>();
@@ -163,10 +174,12 @@ public class GatheredTracker {
 
     @Subscribe
     public void onStatChanged(StatChanged event) {
-        if (EARNING.contains(event.getSkill())) {
-            lastEarnTick = client.getTickCount();
-            lastEarnSkill = event.getSkill();
-        }
+        Skill skill = event.getSkill();
+        if (!EARNING.contains(skill)) return;
+        Integer seen = lastXp.put(skill, event.getXp());
+        if (!earned(seen, event.getXp())) return;
+        lastEarnTick = client.getTickCount();
+        lastEarnSkill = skill;
     }
 
     @Subscribe
@@ -249,6 +262,19 @@ public class GatheredTracker {
     }
 
     // ── Decisions, kept pure so they can be tested without a client ──────────────
+
+    /**
+     * Whether a stat change carried experience, given what the skill last sat at.
+     *
+     * A stat change on its own says nothing. A drained level healing back, a boost wearing
+     * off and the burst that arrives at login all report one with the experience unmoved,
+     * and each would otherwise open the window that is supposed to keep bank withdrawals,
+     * trades and Grand Exchange collections out. The first sighting of a skill is the
+     * baseline rather than a gain, so logging in never vouches for anything.
+     */
+    static boolean earned(Integer seen, int xp) {
+        return seen != null && xp > seen;
+    }
 
     /** Whether experience earned at {@code lastEarnTick} still vouches for {@code tick}. */
     static boolean anchored(int tick, int lastEarnTick) {
