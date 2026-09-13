@@ -79,6 +79,9 @@ public class BirdhousePlugin extends Plugin {
     private SessionTracker sessionTracker;
 
     @Inject
+    private ImpostorPositionTracker impostorPositionTracker;
+
+    @Inject
     private EventBus eventBus;
 
     private NavigationButton navButton;
@@ -94,6 +97,12 @@ public class BirdhousePlugin extends Plugin {
         eventBus.register(gatheredTracker);
         eventBus.register(killCountTracker);
         eventBus.register(clanLootReporter);
+        eventBus.register(impostorPositionTracker);
+
+        // Registered and started unconditionally, because the toggle can be switched on
+        // mid-round and the tracker's own gate is what decides whether anything is sent.
+        // Idle it costs one boolean read per game tick and one per second on its scheduler.
+        impostorPositionTracker.start();
 
         String token = config.authToken();
         if (token != null) {
@@ -150,6 +159,8 @@ public class BirdhousePlugin extends Plugin {
         eventBus.unregister(gatheredTracker);
         eventBus.unregister(killCountTracker);
         eventBus.unregister(clanLootReporter);
+        eventBus.unregister(impostorPositionTracker);
+        impostorPositionTracker.stop();
         overlayManager.remove(birdhouseOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();
@@ -187,6 +198,9 @@ public class BirdhousePlugin extends Plugin {
             }
         } else if (event.getGameState() == GameState.LOGIN_SCREEN) {
             sessionTracker.endSession();
+            // Game ticks are what keep the sampled position fresh, and they stop here, so
+            // the last one has to be dropped rather than left to be resent on the keepalive.
+            impostorPositionTracker.clearPosition();
         }
     }
 
@@ -247,6 +261,14 @@ public class BirdhousePlugin extends Plugin {
 
         if ("enableTeamChat".equals(event.getKey())) {
             birdhousePanel.onChatConfigChanged();
+        }
+
+        if ("shareImpostorPosition".equals(event.getKey())) {
+            // Switching off takes effect on the next tick through the tracker's own gate;
+            // this drops what was already sampled so nothing in flight outlives the choice.
+            // Switching on clears a stop left over from an earlier round, so the player does
+            // not have to wait for the next phase change to start being counted.
+            impostorPositionTracker.clearPosition();
         }
 
         if ("showTeamStatus".equals(event.getKey())) {

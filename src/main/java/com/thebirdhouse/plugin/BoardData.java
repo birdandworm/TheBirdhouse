@@ -23,6 +23,12 @@ public class BoardData {
     // yet — the plugin warns the player to screenshot instead of auto-submitting.
     private Boolean started;
 
+    // The Impostor: which part of the game loop the room is in — lobby, round, meeting,
+    // reveal or done. Only "round" wants position reports, and gating on it here is what
+    // keeps the plugin from ticking through meetings and votes for the server to discard.
+    // Absent on every other game type and on older servers, which reads as "no round".
+    private String phase;
+
     // Tile Race: opponent positions
     private List<OpponentPosition> opponents;
 

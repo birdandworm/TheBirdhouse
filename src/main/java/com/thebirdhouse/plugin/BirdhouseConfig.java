@@ -188,6 +188,31 @@ public interface BirdhouseConfig extends Config {
     }
 
     @ConfigSection(
+        name = "The Impostor",
+        description = "Share where you are standing during a game of The Impostor",
+        position = 7,
+        closedByDefault = true
+    )
+    String impostorSection = "impostor";
+
+    @ConfigItem(
+        keyName = "shareImpostorPosition",
+        name = "Share My Location",
+        description =
+            "While a round of The Impostor is running, report where you are standing so the game can work out "
+                + "who could see whom. Sent every few seconds, and only during a round — never in the lobby, a "
+                + "meeting or any other game. Nobody in the room is shown your position; it is used to decide "
+                + "what your character would have witnessed, which is the same thing an alibi is made of. "
+                + "Off by default, and the mode is unplayable without it, so expect your host to ask.",
+        section = impostorSection,
+        position = 0,
+        warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers"
+    )
+    default boolean shareImpostorPosition() {
+        return false;
+    }
+
+    @ConfigSection(
         name = "Activity Tracking",
         description = "Session and playtime tracking",
         position = 5
