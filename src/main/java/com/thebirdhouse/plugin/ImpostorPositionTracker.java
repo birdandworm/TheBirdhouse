@@ -1,11 +1,14 @@
 package com.thebirdhouse.plugin;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
+import net.runelite.client.Notifier;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
@@ -74,6 +77,14 @@ public class ImpostorPositionTracker {
     @Inject
     private DropMatcher dropMatcher;
 
+    /** For the chat line, which has to be written on the client thread or it is dropped. */
+    @Inject
+    private ClientThread clientThread;
+
+    /** For the flash, respecting whatever the player already chose about notifications. */
+    @Inject
+    private Notifier notifier;
+
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> task;
 
@@ -94,6 +105,12 @@ public class ImpostorPositionTracker {
     /** The last zone the server named, purely so a log line can say something useful. */
     private volatile String zone;
 
+    /**
+     * Told they are out. Volatile because the HTTP callback sets it and the client thread
+     * reads it every frame to draw the notice.
+     */
+    private volatile boolean dead;
+
     public void start() {
         stop();
         task = scheduler.scheduleAtFixedRate(this::poll, POLL_INTERVAL_MS, POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
@@ -110,6 +127,7 @@ public class ImpostorPositionTracker {
         stoppedKey = null;
         failures = 0;
         zone = null;
+        dead = false;
     }
 
     /**
@@ -133,6 +151,10 @@ public class ImpostorPositionTracker {
         stoppedKey = null;
         failures = 0;
         zone = null;
+        // Cleared so a relog re-hears it. The server re-asserts a death, so this costs one
+        // repeated notification to somebody who is dead and ought to be reminded of it —
+        // better than a ghost who logged back in and found the notice gone.
+        dead = false;
     }
 
     /**
@@ -178,6 +200,33 @@ public class ImpostorPositionTracker {
         return board != null
             && "impostor".equals(board.getGameType())
             && "round".equals(board.getPhase());
+    }
+
+    /**
+     * Whether to keep talking to the server at all, which is a weaker question than whether a
+     * round is running, and has to be.
+     *
+     * A kill lands when the round closes — the same instant the phase stops being
+     * {@code round}. Gate the sending on {@link #roundIsRunning} and the plugin falls silent
+     * at precisely the moment the server has something to tell it, so the victim finds out
+     * they are dead at the start of the *next* round: after the meeting they most needed to
+     * keep quiet through. Today it happens to work, because the board this reads is up to a
+     * minute stale and the plugin therefore keeps ticking through a round that has already
+     * ended. Relying on a cache being out of date is not a design.
+     *
+     * So sending continues for as long as the game is live, and the server decides. It refuses
+     * anything outside a round with a stop, before storing it — see the position handler,
+     * where the liveness check deliberately sits above that refusal.
+     *
+     * The cost is one refused request per phase change per player, and coordinates that go
+     * over the wire during meetings and are discarded rather than never being sent. That is a
+     * real weakening of "only while a round is running" and it is worth it: the alternative is
+     * a mode where dying arrives late, which is the one place lateness does damage.
+     */
+    static boolean gameIsLive(BoardData board) {
+        return board != null
+            && "impostor".equals(board.getGameType())
+            && Boolean.TRUE.equals(board.getStarted());
     }
 
     /**
@@ -244,15 +293,30 @@ public class ImpostorPositionTracker {
             failures = 0;
         }
 
-        if (!config.shareImpostorPosition() || !roundIsRunning(board) || room == null) {
+        if (!config.shareImpostorPosition() || !gameIsLive(board) || room == null) {
             return;
         }
         if (key.equals(stoppedKey) || failures >= MAX_FAILURES) {
             return;
         }
 
-        Sample now = latest;
         long since = System.currentTimeMillis() - lastSentAt;
+
+        // Between rounds: ask, without saying where we are. The only thing worth hearing here
+        // is that we have been killed, and the stop that comes back with the server's refusal
+        // means this costs one request per phase rather than one every tick.
+        if (!roundIsRunning(board)) {
+            if (since < tickMs) {
+                return;
+            }
+            lastSent = null;
+            lastSentAt = System.currentTimeMillis();
+            apiClient.reportPosition(PositionPayload.statusOnly(room))
+                .thenAccept(ack -> onAck(key, null, ack));
+            return;
+        }
+
+        Sample now = latest;
         if (!dueToSend(lastSent, now, since, tickMs, keepaliveMs)) {
             return;
         }
@@ -285,6 +349,11 @@ public class ImpostorPositionTracker {
             keepaliveMs = ack.getKeepalive() * 1000L;
         }
 
+        // Before the stop, which arrives with it and would otherwise return first.
+        if (ack.isDead()) {
+            announceDeath();
+        }
+
         if (ack.isStop()) {
             stoppedKey = key;
             zone = null;
@@ -296,6 +365,43 @@ public class ImpostorPositionTracker {
             return;
         }
         zone = ack.getZone();
+    }
+
+    /**
+     * Tell the player they are out, once.
+     *
+     * THE ORDER OF THE WORDS IS THE FEATURE. Everybody is on voice chat, and the honest
+     * reaction to a screen flash mid-fight is to say something — which tells the room that a
+     * kill just happened and roughly where, and that is most of what the meeting was for. So
+     * the instruction comes before the news, because it has to land in the quarter second
+     * before somebody reacts, and the news is no use to them anyway.
+     *
+     * The notifier rather than a hand-rolled flash: it honours whatever the player already
+     * chose about notifications, and a plugin that forces a flash on somebody who switched
+     * them off is a plugin they uninstall.
+     *
+     * Idempotent because the server re-asserts a death on each phase change — deliberately,
+     * so a missed one still arrives — and the second telling should be silent.
+     */
+    private void announceDeath() {
+        if (dead) {
+            return;
+        }
+        dead = true;
+        notifier.notify("Say nothing. You have been eliminated.");
+        // addChatMessage does nothing off the client thread. Same hop as DropMatcher and
+        // AchievementTracker make, and for the same reason.
+        clientThread.invoke(() -> client.addChatMessage(
+            ChatMessageType.GAMEMESSAGE, "",
+            "<col=ff0000>Say nothing.</col> You have been eliminated. "
+                + "Nothing you do from here counts. Stay muted and keep watching.",
+            ""));
+        log.debug("Player eliminated");
+    }
+
+    /** Whether the player has been told they are out, for the overlay that keeps saying so. */
+    public boolean isDead() {
+        return dead;
     }
 
     /**

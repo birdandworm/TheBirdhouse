@@ -30,6 +30,7 @@ public class ImpostorPositionTrackerTest {
         BoardData b = new BoardData();
         b.setGameType(gameType);
         b.setPhase(phase);
+        b.setStarted(true);
         return b;
     }
 
@@ -47,6 +48,72 @@ public class ImpostorPositionTrackerTest {
         for (String phase : new String[]{"lobby", "meeting", "reveal", "done"}) {
             assertFalse(phase, ImpostorPositionTracker.roundIsRunning(board("impostor", phase)));
         }
+    }
+
+    // ── Whether to keep talking to the server at all ─────────────────────────────
+    //
+    // A weaker question than whether a round is running, and it has to be. A kill lands when
+    // the round closes, which is the same instant the phase stops being "round" — so a plugin
+    // that goes silent on the phase falls silent at exactly the moment the server has something
+    // to tell it, and the victim learns they are dead after the meeting they should have kept
+    // quiet through.
+
+    @Test
+    public void aLiveGameIsStillWorthTalkingToOutsideARound() {
+        for (String phase : new String[]{"round", "meeting", "reveal", "lobby"}) {
+            assertTrue(phase, ImpostorPositionTracker.gameIsLive(board("impostor", phase)));
+        }
+    }
+
+    @Test
+    public void aGameThatHasNotStartedIsNotLive() {
+        // Nobody has been dealt a role, so there is no death to hear about and nothing to ask.
+        BoardData notStarted = board("impostor", "lobby");
+        notStarted.setStarted(false);
+        assertFalse(ImpostorPositionTracker.gameIsLive(notStarted));
+
+        BoardData unknown = board("impostor", "lobby");
+        unknown.setStarted(null);
+        assertFalse("an older server sending no started flag must read as not live",
+            ImpostorPositionTracker.gameIsLive(unknown));
+    }
+
+    @Test
+    public void anotherGameTypeIsNeverLiveEither() {
+        assertFalse(ImpostorPositionTracker.gameIsLive(board("bingo", "round")));
+        assertFalse(ImpostorPositionTracker.gameIsLive(null));
+    }
+
+    @Test
+    public void locationLeavesTheClientOnlyDuringARound() {
+        // The two gates in one assertion, because the relationship between them IS the design:
+        // keep asking for as long as the game is live, but only ever say where you are while a
+        // round is running. Anything that made these agree would either lose the death or start
+        // sending coordinates through meetings.
+        BoardData meeting = board("impostor", "meeting");
+        assertTrue("the plugin must keep asking through a meeting",
+            ImpostorPositionTracker.gameIsLive(meeting));
+        assertFalse("the plugin must not report a position through a meeting",
+            ImpostorPositionTracker.roundIsRunning(meeting));
+    }
+
+    @Test
+    public void aStatusOnlyRequestCarriesNoLocation() {
+        PositionPayload p = PositionPayload.statusOnly("ABC123");
+
+        assertTrue(p.isStatusOnly());
+        assertEquals("ABC123", p.getRoomCode());
+        // Zeroed rather than merely ignored by the far end: never having sent a coordinate is a
+        // stronger promise than the server agreeing not to look at one.
+        assertEquals(0, p.getX());
+        assertEquals(0, p.getY());
+        assertEquals(0, p.getPlane());
+        assertFalse(p.isInstance());
+    }
+
+    @Test
+    public void aRealPositionIsNotMarkedStatusOnly() {
+        assertFalse(at(3200, 9860).payload("ABC123").isStatusOnly());
     }
 
     @Test

@@ -30,11 +30,34 @@ public class PositionPayload {
      */
     private boolean instance;
 
+    /**
+     * "Nothing to report — is there anything I should know?"
+     *
+     * The mode has to be able to tell a player they are dead, and a kill lands at the instant
+     * a round closes, when there is by definition no round to report a position for. Rather
+     * than keep sending coordinates outside a round so that the answer has something to ride
+     * on, this says plainly that there is no position in this request and the fields below are
+     * not to be read.
+     *
+     * The coordinates are zeroed rather than merely ignored, because "the server promises not
+     * to look" is a weaker guarantee than never having sent them — and this feature carries an
+     * IP warning and a documented promise that location leaves the client only while a round is
+     * running. Keeping that promise exactly is worth one boolean.
+     */
+    private boolean statusOnly;
+
     public PositionPayload(String roomCode, int x, int y, int plane, boolean instance) {
         this.roomCode = roomCode;
         this.x = x;
         this.y = y;
         this.plane = plane;
         this.instance = instance;
+    }
+
+    /** A request that carries no location at all, only the question. */
+    public static PositionPayload statusOnly(String roomCode) {
+        PositionPayload p = new PositionPayload(roomCode, 0, 0, 0, false);
+        p.statusOnly = true;
+        return p;
     }
 }

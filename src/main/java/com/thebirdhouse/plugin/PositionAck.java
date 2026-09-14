@@ -37,4 +37,20 @@ public class PositionAck {
      * position, so this must not be treated as {@link #stop}.
      */
     private boolean throttled;
+
+    /**
+     * You are out of the game.
+     *
+     * This ack is the only channel the mode has into the client that runs faster than a
+     * minute, and dying is the news that cannot wait one: until the player is told, they are
+     * visibly still fighting something, which tells the room more than the meeting was
+     * supposed to.
+     *
+     * Never says who. That is not squeamishness — a victim who knew would give it away in the
+     * meeting whether they meant to or not, and they are the one person in the room who
+     * cannot be asked to argue their way out of it.
+     *
+     * Arrives with {@link #stop}, since a dead player's position is nobody's evidence.
+     */
+    private boolean dead;
 }
