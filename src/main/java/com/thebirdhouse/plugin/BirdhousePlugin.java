@@ -73,6 +73,15 @@ public class BirdhousePlugin extends Plugin {
     private ImpostorDeathOverlay impostorDeathOverlay;
 
     @Inject
+    private ImpostorBodyOverlay impostorBodyOverlay;
+
+    @Inject
+    private ImpostorStatusOverlay impostorStatusOverlay;
+
+    @Inject
+    private ImpostorActions impostorActions;
+
+    @Inject
     private BirdhousePanel birdhousePanel;
 
     @Inject
@@ -101,6 +110,7 @@ public class BirdhousePlugin extends Plugin {
         eventBus.register(killCountTracker);
         eventBus.register(clanLootReporter);
         eventBus.register(impostorPositionTracker);
+        eventBus.register(impostorActions);
 
         // Registered and started unconditionally, because the toggle can be switched on
         // mid-round and the tracker's own gate is what decides whether anything is sent.
@@ -118,6 +128,8 @@ public class BirdhousePlugin extends Plugin {
 
         overlayManager.add(birdhouseOverlay);
         overlayManager.add(impostorDeathOverlay);
+        overlayManager.add(impostorBodyOverlay);
+        overlayManager.add(impostorStatusOverlay);
 
         BufferedImage icon;
         try {
@@ -164,9 +176,12 @@ public class BirdhousePlugin extends Plugin {
         eventBus.unregister(killCountTracker);
         eventBus.unregister(clanLootReporter);
         eventBus.unregister(impostorPositionTracker);
+        eventBus.unregister(impostorActions);
         impostorPositionTracker.stop();
         overlayManager.remove(birdhouseOverlay);
         overlayManager.remove(impostorDeathOverlay);
+        overlayManager.remove(impostorBodyOverlay);
+        overlayManager.remove(impostorStatusOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();
         birdhousePanel.shutdown();

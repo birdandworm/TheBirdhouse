@@ -591,6 +591,46 @@ public class BirdhouseApiClient {
     /**
      * Fetch the player's active rooms for auto-detection.
      */
+    public CompletableFuture<Boolean> impostorKill(String roomCode, String targetName) {
+        JsonObject body = new JsonObject();
+        body.addProperty("roomCode", roomCode);
+        body.addProperty("targetName", targetName);
+        return postImpostorAction("/impostor-kill", body);
+    }
+
+    public CompletableFuture<Boolean> impostorReport(String roomCode) {
+        JsonObject body = new JsonObject();
+        body.addProperty("roomCode", roomCode);
+        return postImpostorAction("/impostor-report", body);
+    }
+
+    public CompletableFuture<Boolean> impostorSabotage(String roomCode) {
+        JsonObject body = new JsonObject();
+        body.addProperty("roomCode", roomCode);
+        return postImpostorAction("/impostor-sabotage", body);
+    }
+
+    private CompletableFuture<Boolean> postImpostorAction(String path, JsonObject body) {
+        if (!hasAuthToken()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Request request = new Request.Builder()
+                    .url(BASE_URL + path)
+                    .header("Authorization", "Bearer " + authToken)
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(body)))
+                    .build();
+                try (Response response = httpClient.newCall(request).execute()) {
+                    return response.isSuccessful();
+                }
+            } catch (IOException e) {
+                log.debug("Impostor action failed: {}", e.getMessage());
+                return false;
+            }
+        });
+    }
+
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
         return CompletableFuture.supplyAsync(() -> {
             if (!hasAuthToken()) {
