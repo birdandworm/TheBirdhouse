@@ -537,6 +537,58 @@ public class BirdhouseApiClient {
     }
 
     /**
+     * Report where the player is standing during a round of The Impostor.
+     *
+     * Always the primary backend, never the board cache host: that host is read-only by
+     * design and its reverse proxy routes four paths, so anything else there comes back as
+     * a plain-text 404 from the catch-all. Team chat once shipped dead for precisely that
+     * reason, and a position endpoint would fail the same way but silently, since nothing
+     * about a missing position looks broken from in game.
+     *
+     * Resolves to null when the report did not land — a bad token, an unreachable server,
+     * anything. The caller treats that as "this sample is gone" and does not retry it: a
+     * position is worthless a few seconds later, so there is no queue and no backlog to
+     * flush. A refusal, by contrast, resolves normally with {@code stop} set, because that
+     * is the server telling us something we need to act on.
+     */
+    public CompletableFuture<PositionAck> reportPosition(PositionPayload payload) {
+        if (!hasAuthToken()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Request request = new Request.Builder()
+                    .url(BASE_URL + "/impostor-position")
+                    .header("Authorization", "Bearer " + authToken)
+                    .post(RequestBody.create(JSON_TYPE, gson.toJson(payload)))
+                    .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    String body = response.body() != null ? response.body().string() : "";
+                    // A refusal is a 409 carrying a parseable body, and it is the one error
+                    // worth reading: it says to stop, and honouring that is what stops a
+                    // client ticking into a finished game for the rest of the evening.
+                    if (response.isSuccessful() || response.code() == 409) {
+                        PositionAck ack = gson.fromJson(body, PositionAck.class);
+                        if (ack != null) {
+                            return ack;
+                        }
+                    }
+                    // Every other failure is anonymous on purpose. A 401 or a 403 means the
+                    // token or the room is wrong, which the player fixes in settings rather
+                    // than something this loop can recover from, so it is logged and dropped
+                    // rather than retried.
+                    log.debug("Position report refused: {}", response.code());
+                    return null;
+                }
+            } catch (IOException e) {
+                log.debug("Failed to report position: {}", e.getMessage());
+                return null;
+            }
+        });
+    }
+
+    /**
      * Fetch the player's active rooms for auto-detection.
      */
     public CompletableFuture<java.util.List<ActiveRoom>> fetchActiveRooms() {
