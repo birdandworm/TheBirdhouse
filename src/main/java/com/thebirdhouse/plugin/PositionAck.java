@@ -53,4 +53,16 @@ public class PositionAck {
      * Arrives with {@link #stop}, since a dead player's position is nobody's evidence.
      */
     private boolean dead;
+
+    /** Your own role, or null before the deal. Nobody else's. */
+    private String role;
+
+    /** A meeting is open — get on voice. */
+    private boolean meeting;
+
+    /** Names are hidden. Impostors never see this as true. */
+    private boolean blackout;
+
+    /** Bodies in the zone you are standing in, and nowhere else. */
+    private java.util.List<ImpostorBody> bodies;
 }

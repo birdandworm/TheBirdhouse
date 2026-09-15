@@ -128,6 +128,10 @@ public class ImpostorPositionTracker {
         failures = 0;
         zone = null;
         dead = false;
+        role = null;
+        meeting = false;
+        blackout = false;
+        bodies = java.util.Collections.emptyList();
     }
 
     /**
@@ -155,18 +159,24 @@ public class ImpostorPositionTracker {
         // repeated notification to somebody who is dead and ought to be reminded of it —
         // better than a ghost who logged back in and found the notice gone.
         dead = false;
+        role = null;
+        meeting = false;
+        blackout = false;
+        bodies = java.util.Collections.emptyList();
     }
 
     /**
-     * Sample the position, on the client thread, while a round is actually running.
-     *
-     * Gated here as well as in the send decision so that a player not in an impostor game —
-     * which is almost everybody, almost always — does nothing per tick beyond reading a
-     * boolean and a field off the cached board.
+     * Own role, in-zone bodies, meeting and blackout — written from the HTTP callback,
+     * read on the client thread by overlays and menus.
      */
+    private volatile String role;
+    private volatile boolean meeting;
+    private volatile boolean blackout;
+    private volatile java.util.List<ImpostorBody> bodies = java.util.Collections.emptyList();
+
     @Subscribe
     public void onGameTick(GameTick event) {
-        if (!config.shareImpostorPosition() || !roundIsRunning(dropMatcher.getActiveBoard())) {
+        if (!config.shareImpostorPosition() || !shouldSample(dropMatcher.getActiveBoard())) {
             latest = null;
             return;
         }
@@ -203,6 +213,20 @@ public class ImpostorPositionTracker {
     }
 
     /**
+     * Whether to send coordinates, not just a status ping.
+     *
+     * The lobby is included because deal refuses anyone without a fresh sample. Meetings
+     * still go out as status-only — people are arguing, not being measured.
+     */
+    static boolean shouldSample(BoardData board) {
+        if (board == null || !"impostor".equals(board.getGameType())) {
+            return false;
+        }
+        String phase = board.getPhase();
+        return phase == null || phase.isEmpty() || "lobby".equals(phase) || "round".equals(phase);
+    }
+
+    /**
      * Whether to keep talking to the server at all, which is a weaker question than whether a
      * round is running, and has to be.
      *
@@ -224,9 +248,18 @@ public class ImpostorPositionTracker {
      * a mode where dying arrives late, which is the one place lateness does damage.
      */
     static boolean gameIsLive(BoardData board) {
-        return board != null
-            && "impostor".equals(board.getGameType())
-            && Boolean.TRUE.equals(board.getStarted());
+        if (board == null || !"impostor".equals(board.getGameType())) {
+            return false;
+        }
+        String phase = board.getPhase();
+        if ("done".equals(phase) || "reveal".equals(phase)) {
+            return false;
+        }
+        if ("finished".equals(board.getStatus())) {
+            return false;
+        }
+        // The lobby has to be live before anyone is dealt: that is how they ready up.
+        return true;
     }
 
     /**
@@ -305,7 +338,7 @@ public class ImpostorPositionTracker {
         // Between rounds: ask, without saying where we are. The only thing worth hearing here
         // is that we have been killed, and the stop that comes back with the server's refusal
         // means this costs one request per phase rather than one every tick.
-        if (!roundIsRunning(board)) {
+        if (!shouldSample(board)) {
             if (since < tickMs) {
                 return;
             }
@@ -352,6 +385,15 @@ public class ImpostorPositionTracker {
         // Before the stop, which arrives with it and would otherwise return first.
         if (ack.isDead()) {
             announceDeath();
+        }
+
+        if (ack.getRole() != null) {
+            role = ack.getRole();
+        }
+        meeting = ack.isMeeting();
+        blackout = ack.isBlackout();
+        if (ack.getBodies() != null) {
+            bodies = ack.getBodies();
         }
 
         if (ack.isStop()) {
@@ -402,6 +444,31 @@ public class ImpostorPositionTracker {
     /** Whether the player has been told they are out, for the overlay that keeps saying so. */
     public boolean isDead() {
         return dead;
+    }
+
+    public boolean isImpostor() {
+        return "impostor".equals(role);
+    }
+
+    public boolean isMeeting() {
+        return meeting;
+    }
+
+    public boolean isBlackout() {
+        return blackout;
+    }
+
+    public java.util.List<ImpostorBody> getBodies() {
+        return bodies;
+    }
+
+    public ImpostorBody bodyAt(int x, int y, int plane) {
+        for (ImpostorBody b : bodies) {
+            if (b != null && b.getX() == x && b.getY() == y && b.getPlane() == plane) {
+                return b;
+            }
+        }
+        return null;
     }
 
     /**

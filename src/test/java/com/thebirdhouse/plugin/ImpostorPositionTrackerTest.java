@@ -60,22 +60,30 @@ public class ImpostorPositionTrackerTest {
 
     @Test
     public void aLiveGameIsStillWorthTalkingToOutsideARound() {
-        for (String phase : new String[]{"round", "meeting", "reveal", "lobby"}) {
+        for (String phase : new String[]{"round", "meeting", "lobby"}) {
             assertTrue(phase, ImpostorPositionTracker.gameIsLive(board("impostor", phase)));
         }
     }
 
     @Test
-    public void aGameThatHasNotStartedIsNotLive() {
-        // Nobody has been dealt a role, so there is no death to hear about and nothing to ask.
+    public void theLobbyIsLiveSoPeopleCanReadyUp() {
         BoardData notStarted = board("impostor", "lobby");
         notStarted.setStarted(false);
-        assertFalse(ImpostorPositionTracker.gameIsLive(notStarted));
+        assertTrue(ImpostorPositionTracker.gameIsLive(notStarted));
+        assertTrue(ImpostorPositionTracker.shouldSample(notStarted));
+    }
 
-        BoardData unknown = board("impostor", "lobby");
-        unknown.setStarted(null);
-        assertFalse("an older server sending no started flag must read as not live",
-            ImpostorPositionTracker.gameIsLive(unknown));
+    @Test
+    public void aFinishedGameIsNotLive() {
+        assertFalse(ImpostorPositionTracker.gameIsLive(board("impostor", "done")));
+        assertFalse(ImpostorPositionTracker.gameIsLive(board("impostor", "reveal")));
+    }
+
+    @Test
+    public void theLobbyAndARoundAreSampled() {
+        assertTrue(ImpostorPositionTracker.shouldSample(board("impostor", "lobby")));
+        assertTrue(ImpostorPositionTracker.shouldSample(board("impostor", "round")));
+        assertFalse(ImpostorPositionTracker.shouldSample(board("impostor", "meeting")));
     }
 
     @Test
@@ -94,7 +102,7 @@ public class ImpostorPositionTrackerTest {
         assertTrue("the plugin must keep asking through a meeting",
             ImpostorPositionTracker.gameIsLive(meeting));
         assertFalse("the plugin must not report a position through a meeting",
-            ImpostorPositionTracker.roundIsRunning(meeting));
+            ImpostorPositionTracker.shouldSample(meeting));
     }
 
     @Test
