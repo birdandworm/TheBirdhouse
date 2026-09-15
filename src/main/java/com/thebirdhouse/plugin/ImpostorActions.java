@@ -42,8 +42,22 @@ public class ImpostorActions {
     @Inject
     private DropMatcher dropMatcher;
 
+    /**
+     * Eliminate, Report body and Cut the lights exist only while this client is attached
+     * to a live Impostor round. A leftover role from an earlier game must not put those
+     * options on a bingo board — or any other mode.
+     */
+    static boolean commandsAllowed(BoardData board) {
+        return board != null
+            && "impostor".equals(board.getGameType())
+            && "round".equals(board.getPhase());
+    }
+
     @Subscribe
     public void onClientTick(ClientTick event) {
+        if (!commandsAllowed(dropMatcher.getActiveBoard())) {
+            return;
+        }
         if (!tracker.isBlackout() || tracker.isImpostor() || tracker.isDead()) {
             return;
         }
@@ -64,6 +78,9 @@ public class ImpostorActions {
     @Subscribe
     public void onMenuEntryAdded(MenuEntryAdded event) {
         if (tracker.isDead()) {
+            return;
+        }
+        if (!commandsAllowed(dropMatcher.getActiveBoard())) {
             return;
         }
         String room = dropMatcher.getActiveRoomCode();

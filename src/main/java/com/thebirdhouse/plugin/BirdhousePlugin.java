@@ -79,6 +79,9 @@ public class BirdhousePlugin extends Plugin {
     private ImpostorStatusOverlay impostorStatusOverlay;
 
     @Inject
+    private ImpostorBlackoutOverlay impostorBlackoutOverlay;
+
+    @Inject
     private ImpostorActions impostorActions;
 
     @Inject
@@ -130,6 +133,7 @@ public class BirdhousePlugin extends Plugin {
         overlayManager.add(impostorDeathOverlay);
         overlayManager.add(impostorBodyOverlay);
         overlayManager.add(impostorStatusOverlay);
+        overlayManager.add(impostorBlackoutOverlay);
 
         BufferedImage icon;
         try {
@@ -182,6 +186,7 @@ public class BirdhousePlugin extends Plugin {
         overlayManager.remove(impostorDeathOverlay);
         overlayManager.remove(impostorBodyOverlay);
         overlayManager.remove(impostorStatusOverlay);
+        overlayManager.remove(impostorBlackoutOverlay);
         clientToolbar.removeNavigation(navButton);
         birdhousePanel.stopAutoRefresh();
         birdhousePanel.shutdown();
