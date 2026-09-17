@@ -57,6 +57,9 @@ public class PositionAck {
     /** Your own role, or null before the deal. Nobody else's. */
     private String role;
 
+    /** Lobby, round, meeting, reveal or done — fresher than the 60s board poll. */
+    private String phase;
+
     /** A meeting is open — get on voice. */
     private boolean meeting;
 

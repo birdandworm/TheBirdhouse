@@ -125,8 +125,12 @@ public class DropMatcher {
     @Subscribe
     public void onLootReceived(LootReceived event) {
         if (!config.autoSubmitDrops()) {
-            log.info("[Birdhouse] Auto-submit disabled in config, skipping loot event");
-            return;
+            // Impostor tasks ARE the game. Auto-submit is a convenience for bingo;
+            // switching it off must not silently freeze the crew's bar.
+            if (activeBoard == null || !"impostor".equals(activeBoard.getGameType())) {
+                log.info("[Birdhouse] Auto-submit disabled in config, skipping loot event");
+                return;
+            }
         }
         if (activeBoard == null) {
             log.info("[Birdhouse] No active board loaded, skipping loot event");

@@ -31,6 +31,20 @@ public class ImpostorActionsTest {
     }
 
     @Test
+    public void aFreshAckPhaseBeatsAStaleLobbyBoard() {
+        assertTrue(ImpostorActions.commandsAllowed(board("impostor", "lobby"), "round"));
+        assertFalse(ImpostorActions.commandsAllowed(board("impostor", "round"), "meeting"));
+        assertFalse(ImpostorActions.commandsAllowed(board("bingo", "lobby"), "round"));
+    }
+
+    @Test
+    public void eliminateIsOfferedOncePerMenuNotOncePerPlayerRow() {
+        assertTrue(ImpostorActions.isFirstPlayerOption(net.runelite.api.MenuAction.PLAYER_FIRST_OPTION.getId()));
+        assertFalse(ImpostorActions.isFirstPlayerOption(net.runelite.api.MenuAction.PLAYER_SECOND_OPTION.getId()));
+        assertFalse(ImpostorActions.isFirstPlayerOption(net.runelite.api.MenuAction.PLAYER_THIRD_OPTION.getId()));
+    }
+
+    @Test
     public void anotherGameTypeNeverOffersThem() {
         for (String type : new String[]{"bingo", "tilerace", "territory", "chipdrop", "battleship"}) {
             assertFalse(type, ImpostorActions.commandsAllowed(board(type, "round")));

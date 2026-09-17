@@ -167,15 +167,39 @@ public class BirdhouseApiClient {
     public CompletableFuture<BoardData> fetchBoard(String roomCode) {
         return CompletableFuture.supplyAsync(() -> {
             BoardResult cached = requestBoard(BOARD_BASE_URL, roomCode);
-            if (cached.board != null) {
+            if (cached.board != null && trustCachedBoard(cached.board)) {
                 return cached.board;
             }
-            if (!cached.retryable) {
-                return null;
+            if (cached.board != null || cached.retryable) {
+                log.debug("Board cache host unavailable or stale for {}, falling back to primary backend", roomCode);
+                BoardData primary = requestBoard(BASE_URL, roomCode).board;
+                if (primary != null) {
+                    return primary;
+                }
+                return cached.board;
             }
-            log.debug("Board cache host unavailable for {}, falling back to primary backend", roomCode);
-            return requestBoard(BASE_URL, roomCode).board;
+            return null;
         });
+    }
+
+    /**
+     * An empty Impostor board after the deal is usually a cache host that does not
+     * know the current objective pool — not "you have nothing to do". Ask the
+     * primary backend instead so Catacombs tasks (and anything else added later)
+     * still reach the plugin.
+     */
+    static boolean trustCachedBoard(BoardData board) {
+        if (board == null) {
+            return false;
+        }
+        if (!"impostor".equals(board.getGameType())) {
+            return true;
+        }
+        if (board.getTiles() != null && !board.getTiles().isEmpty()) {
+            return true;
+        }
+        String phase = board.getPhase();
+        return "done".equals(phase) || "reveal".equals(phase);
     }
 
     /**
@@ -591,28 +615,29 @@ public class BirdhouseApiClient {
     /**
      * Fetch the player's active rooms for auto-detection.
      */
-    public CompletableFuture<Boolean> impostorKill(String roomCode, String targetName) {
+    public CompletableFuture<String> impostorKill(String roomCode, String targetName) {
         JsonObject body = new JsonObject();
         body.addProperty("roomCode", roomCode);
         body.addProperty("targetName", targetName);
         return postImpostorAction("/impostor-kill", body);
     }
 
-    public CompletableFuture<Boolean> impostorReport(String roomCode) {
+    public CompletableFuture<String> impostorReport(String roomCode) {
         JsonObject body = new JsonObject();
         body.addProperty("roomCode", roomCode);
         return postImpostorAction("/impostor-report", body);
     }
 
-    public CompletableFuture<Boolean> impostorSabotage(String roomCode) {
+    public CompletableFuture<String> impostorSabotage(String roomCode) {
         JsonObject body = new JsonObject();
         body.addProperty("roomCode", roomCode);
         return postImpostorAction("/impostor-sabotage", body);
     }
 
-    private CompletableFuture<Boolean> postImpostorAction(String path, JsonObject body) {
+    /** Null on success, a player-facing reason on failure. */
+    private CompletableFuture<String> postImpostorAction(String path, JsonObject body) {
         if (!hasAuthToken()) {
-            return CompletableFuture.completedFuture(false);
+            return CompletableFuture.completedFuture("Paste your plugin token in settings.");
         }
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -622,11 +647,23 @@ public class BirdhouseApiClient {
                     .post(RequestBody.create(JSON_TYPE, gson.toJson(body)))
                     .build();
                 try (Response response = httpClient.newCall(request).execute()) {
-                    return response.isSuccessful();
+                    if (response.isSuccessful()) {
+                        return null;
+                    }
+                    String raw = response.body() != null ? response.body().string() : "";
+                    try {
+                        JsonObject parsed = gson.fromJson(raw, JsonObject.class);
+                        if (parsed != null && parsed.has("error")) {
+                            return parsed.get("error").getAsString();
+                        }
+                    } catch (RuntimeException ignored) {
+                        // Fall through to the generic line.
+                    }
+                    return "That did not work.";
                 }
             } catch (IOException e) {
                 log.debug("Impostor action failed: {}", e.getMessage());
-                return false;
+                return "Could not reach the server.";
             }
         });
     }

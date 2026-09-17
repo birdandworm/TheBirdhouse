@@ -48,7 +48,7 @@ public class ImpostorBlackoutOverlay extends Overlay {
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        if (!shouldMask(dropMatcher.getActiveBoard(), tracker.isBlackout(), tracker.isImpostor(), tracker.isDead())) {
+        if (!shouldMask(dropMatcher.getActiveBoard(), tracker.getPhase(), tracker.isBlackout(), tracker.isImpostor(), tracker.isDead())) {
             return null;
         }
         Player me = client.getLocalPlayer();
@@ -71,7 +71,11 @@ public class ImpostorBlackoutOverlay extends Overlay {
     }
 
     static boolean shouldMask(BoardData board, boolean blackout, boolean impostor, boolean dead) {
-        return ImpostorActions.commandsAllowed(board) && blackout && !impostor && !dead;
+        return shouldMask(board, null, blackout, impostor, dead);
+    }
+
+    static boolean shouldMask(BoardData board, String livePhase, boolean blackout, boolean impostor, boolean dead) {
+        return ImpostorActions.commandsAllowed(board, livePhase) && blackout && !impostor && !dead;
     }
 
     static Rectangle slabFor(FontMetrics metrics, Point loc, String name) {

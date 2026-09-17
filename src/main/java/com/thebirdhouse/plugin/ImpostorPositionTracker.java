@@ -104,6 +104,7 @@ public class ImpostorPositionTracker {
 
     /** The last zone the server named, purely so a log line can say something useful. */
     private volatile String zone;
+    private volatile String rsn;
 
     /**
      * Told they are out. Volatile because the HTTP callback sets it and the client thread
@@ -129,6 +130,7 @@ public class ImpostorPositionTracker {
         zone = null;
         dead = false;
         role = null;
+        phase = null;
         meeting = false;
         blackout = false;
         bodies = java.util.Collections.emptyList();
@@ -160,6 +162,7 @@ public class ImpostorPositionTracker {
         // better than a ghost who logged back in and found the notice gone.
         dead = false;
         role = null;
+        phase = null;
         meeting = false;
         blackout = false;
         bodies = java.util.Collections.emptyList();
@@ -170,6 +173,7 @@ public class ImpostorPositionTracker {
      * read on the client thread by overlays and menus.
      */
     private volatile String role;
+    private volatile String phase;
     private volatile boolean meeting;
     private volatile boolean blackout;
     private volatile java.util.List<ImpostorBody> bodies = java.util.Collections.emptyList();
@@ -193,6 +197,9 @@ public class ImpostorPositionTracker {
         // Reported exactly as the client gives it, instance flag included and coordinates
         // unresolved. See PositionPayload#instance for why resolving them would be wasted
         // work rather than diligence.
+        if (me.getName() != null) {
+            rsn = me.getName();
+        }
         latest = new Sample(where.getX(), where.getY(), where.getPlane(),
             client.getTopLevelWorldView().isInstance());
     }
@@ -356,7 +363,11 @@ public class ImpostorPositionTracker {
 
         lastSent = now;
         lastSentAt = System.currentTimeMillis();
-        apiClient.reportPosition(now.payload(room)).thenAccept(ack -> onAck(key, now, ack));
+        PositionPayload payload = now.payload(room);
+        if (rsn != null) {
+            payload.setPlayerName(rsn);
+        }
+        apiClient.reportPosition(payload).thenAccept(ack -> onAck(key, now, ack));
     }
 
     /**
@@ -389,6 +400,9 @@ public class ImpostorPositionTracker {
 
         if (ack.getRole() != null) {
             role = ack.getRole();
+        }
+        if (ack.getPhase() != null) {
+            phase = ack.getPhase();
         }
         meeting = ack.isMeeting();
         blackout = ack.isBlackout();
@@ -448,6 +462,11 @@ public class ImpostorPositionTracker {
 
     public boolean isImpostor() {
         return "impostor".equals(role);
+    }
+
+    /** The phase the server last named, or null before the first ack. */
+    public String getPhase() {
+        return phase;
     }
 
     public boolean isMeeting() {

@@ -30,6 +30,9 @@ public class PositionPayload {
      */
     private boolean instance;
 
+    /** In-game RSN, so Eliminate can match a right-click name to a site display name. */
+    private String playerName;
+
     /**
      * "Nothing to report — is there anything I should know?"
      *
