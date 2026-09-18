@@ -42,7 +42,9 @@ public class ImpostorBlackoutOverlay extends Overlay {
     @Inject
     public ImpostorBlackoutOverlay() {
         setPosition(OverlayPosition.DYNAMIC);
-        setLayer(OverlayLayer.ABOVE_SCENE);
+        // GPU draws names above the scene. ABOVE_SCENE left the real RSN sitting
+        // on top of our slab — the menu went to ??? and the plate did not.
+        setLayer(OverlayLayer.ABOVE_WIDGETS);
         setPriority(OverlayPriority.HIGHEST);
     }
 
@@ -79,9 +81,10 @@ public class ImpostorBlackoutOverlay extends Overlay {
     }
 
     static Rectangle slabFor(FontMetrics metrics, Point loc, String name) {
-        int width = Math.max(metrics.stringWidth(name), metrics.stringWidth("???")) + 16;
-        int height = metrics.getHeight() + 8;
-        return new Rectangle(loc.getX() - width / 2, loc.getY() - height + 4, width, height);
+        int width = Math.max(metrics.stringWidth(name), metrics.stringWidth("???")) + 40;
+        int height = metrics.getHeight() + 16;
+        // Pad left for the skull / iron / friend icon that sits beside the RSN.
+        return new Rectangle(loc.getX() - width / 2 - 12, loc.getY() - height + 6, width, height);
     }
 
     private static void paintMask(Graphics2D graphics, FontMetrics metrics, Point loc, String name) {

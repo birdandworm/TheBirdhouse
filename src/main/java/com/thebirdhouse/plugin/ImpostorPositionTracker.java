@@ -180,6 +180,7 @@ public class ImpostorPositionTracker {
 
     @Subscribe
     public void onGameTick(GameTick event) {
+        applyBoard(dropMatcher.getActiveBoard());
         if (!config.shareImpostorPosition() || !shouldSample(dropMatcher.getActiveBoard())) {
             latest = null;
             return;
@@ -231,6 +232,22 @@ public class ImpostorPositionTracker {
         }
         String phase = board.getPhase();
         return phase == null || phase.isEmpty() || "lobby".equals(phase) || "round".equals(phase);
+    }
+
+    /**
+     * The board poll is slower than a position ack but it always names this player's
+     * role. Used when an ack is late so Eliminate does not wait on a ping.
+     */
+    public void applyBoard(BoardData board) {
+        if (board == null || !"impostor".equals(board.getGameType())) {
+            return;
+        }
+        if (board.getRole() != null && !board.getRole().isEmpty()) {
+            role = board.getRole();
+        }
+        if (board.getPhase() != null && !board.getPhase().isEmpty() && phase == null) {
+            phase = board.getPhase();
+        }
     }
 
     /**
@@ -482,12 +499,29 @@ public class ImpostorPositionTracker {
     }
 
     public ImpostorBody bodyAt(int x, int y, int plane) {
+        return bodyNear(x, y, plane, 0);
+    }
+
+    /**
+     * A corpse on or next to this tile. Exact-tile matching hid Report body whenever
+     * the click landed one square off the overlay, or the stored corpse tile was a
+     * ping behind the death.
+     */
+    public ImpostorBody bodyNear(int x, int y, int plane, int range) {
+        ImpostorBody best = null;
+        int bestDist = Integer.MAX_VALUE;
+        int allow = Math.max(0, range);
         for (ImpostorBody b : bodies) {
-            if (b != null && b.getX() == x && b.getY() == y && b.getPlane() == plane) {
-                return b;
+            if (b == null || b.getPlane() != plane) {
+                continue;
+            }
+            int dist = Math.max(Math.abs(b.getX() - x), Math.abs(b.getY() - y));
+            if (dist <= allow && dist < bestDist) {
+                best = b;
+                bestDist = dist;
             }
         }
-        return null;
+        return best;
     }
 
     /**

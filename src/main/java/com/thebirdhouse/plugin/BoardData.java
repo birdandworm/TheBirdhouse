@@ -29,6 +29,10 @@ public class BoardData {
     // Absent on every other game type and on older servers, which reads as "no round".
     private String phase;
 
+    // Own role only. Position acks also carry this; the board poll is the fallback so
+    // Eliminate does not vanish if a ping is late or a cache host omitted the ack field.
+    private String role;
+
     // Tile Race: opponent positions
     private List<OpponentPosition> opponents;
 

@@ -45,6 +45,14 @@ public class ImpostorActionsTest {
     }
 
     @Test
+    public void blackoutRewritesWalkHereAndPluginLookupsToo() {
+        java.util.Set<String> others = java.util.Collections.singleton("gim ancestor");
+        assertTrue(ImpostorActions.namesPlayer("GIM Ancestor (level-124)", "GIM Ancestor", others));
+        assertTrue(ImpostorActions.namesPlayer("Walk here GIM Ancestor (level-124)", "Walk here GIM Ancestor", others));
+        assertFalse(ImpostorActions.namesPlayer("a rock", "a rock", others));
+    }
+
+    @Test
     public void anotherGameTypeNeverOffersThem() {
         for (String type : new String[]{"bingo", "tilerace", "territory", "chipdrop", "battleship"}) {
             assertFalse(type, ImpostorActions.commandsAllowed(board(type, "round")));

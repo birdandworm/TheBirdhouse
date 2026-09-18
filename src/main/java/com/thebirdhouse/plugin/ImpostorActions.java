@@ -9,6 +9,7 @@ import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.MenuEntryAdded;
+import net.runelite.api.events.MenuOpened;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.util.ColorUtil;
@@ -17,12 +18,14 @@ import net.runelite.client.util.Text;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.awt.Color;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * In-game verbs for The Impostor: Eliminate, Report body, Cut the lights.
  *
- * Offered only when the position ack says this player may use them. The server still
- * refuses anything that is not legal — the menu is so a crewmate never sees Eliminate.
+ * Offered only when the position ack or board poll says this player may use them.
+ * The server still refuses anything that is not legal.
  */
 @Slf4j
 @Singleton
@@ -77,18 +80,33 @@ public class ImpostorActions {
         if (!tracker.isBlackout() || tracker.isImpostor() || tracker.isDead()) {
             return;
         }
-        Player me = client.getLocalPlayer();
-        String mine = me != null ? me.getName() : null;
-        for (MenuEntry entry : client.getMenuEntries()) {
-            if (!isPlayerMenu(entry.getType().getId())) {
-                continue;
-            }
-            String name = Text.removeTags(entry.getTarget());
-            if (mine != null && mine.equals(name)) {
-                continue;
-            }
-            entry.setTarget(ColorUtil.wrapWithColorTag("???", Color.WHITE));
+        maskMenuNames();
+    }
+
+    /**
+     * Insert Eliminate once the menu is fully built. Gating on PLAYER_FIRST_OPTION
+     * missed the verb whenever Follow was not the first player row — Walk here,
+     * plugin lookups and a custom left-click all skip that opcode.
+     */
+    @Subscribe
+    public void onMenuOpened(MenuOpened event) {
+        if (tracker.isDead() || !tracker.isImpostor()) {
+            return;
         }
+        if (!commandsAllowed(dropMatcher.getActiveBoard(), tracker.getPhase())) {
+            return;
+        }
+        String room = dropMatcher.getActiveRoomCode();
+        if (room == null) {
+            return;
+        }
+        String target = firstOtherPlayerTarget(event.getMenuEntries());
+        if (target == null) {
+            return;
+        }
+        String name = playerName(target);
+        insert(ELIMINATE, ColorUtil.wrapWithColorTag(name, Color.RED), () ->
+            runAction(apiClient.impostorKill(room, name)));
     }
 
     @Subscribe
@@ -104,17 +122,8 @@ public class ImpostorActions {
             return;
         }
 
-        if (tracker.isImpostor() && isFirstPlayerOption(event.getType())) {
-            String target = event.getTarget();
-            Player me = client.getLocalPlayer();
-            String mine = me != null ? me.getName() : null;
-            if (mine == null || !mine.equals(Text.removeTags(target))) {
-                insert(ELIMINATE, target, () ->
-                    runAction(apiClient.impostorKill(room, playerName(target))));
-            }
-        }
-
-        if (REPORT.equals(event.getOption()) || LIGHTS.equals(event.getOption())) {
+        if (REPORT.equals(event.getOption()) || LIGHTS.equals(event.getOption())
+            || ELIMINATE.equals(event.getOption())) {
             return;
         }
         if ("Walk here".equals(event.getOption())) {
@@ -126,13 +135,88 @@ public class ImpostorActions {
                 event.getActionParam0(),
                 event.getActionParam1(),
                 client.getTopLevelWorldView().getPlane());
-            ImpostorBody body = tracker.bodyAt(tile.getX(), tile.getY(), tile.getPlane());
+            ImpostorBody body = tracker.bodyNear(tile.getX(), tile.getY(), tile.getPlane(), 8);
             if (body != null) {
                 String label = body.getName() == null || body.getName().isEmpty() ? "a body" : body.getName();
                 insert(REPORT, "<col=" + Integer.toHexString(Color.RED.getRGB() & 0xffffff) + ">" + label + "</col>",
                     () -> runAction(apiClient.impostorReport(room)));
             }
         }
+    }
+
+    private void maskMenuNames() {
+        Player me = client.getLocalPlayer();
+        String mine = me != null ? Text.removeTags(me.getName()) : null;
+        Set<String> others = nearbyNames(me);
+        if (others.isEmpty()) {
+            return;
+        }
+        for (MenuEntry entry : client.getMenuEntries()) {
+            if (ELIMINATE.equals(entry.getOption()) || REPORT.equals(entry.getOption())
+                || LIGHTS.equals(entry.getOption())) {
+                continue;
+            }
+            String raw = Text.removeTags(entry.getTarget());
+            if (raw == null || raw.isEmpty() || "???".equals(raw)) {
+                continue;
+            }
+            String core = playerName(raw);
+            if (mine != null && mine.equalsIgnoreCase(core)) {
+                continue;
+            }
+            if (namesPlayer(raw, core, others)) {
+                entry.setTarget(ColorUtil.wrapWithColorTag("???", Color.WHITE));
+            }
+        }
+    }
+
+    private Set<String> nearbyNames(Player me) {
+        Set<String> names = new HashSet<>();
+        for (Player other : client.getPlayers()) {
+            if (other == null || other == me || other.getName() == null) {
+                continue;
+            }
+            names.add(Text.removeTags(other.getName()).toLowerCase());
+        }
+        return names;
+    }
+
+    static boolean namesPlayer(String raw, String core, Set<String> others) {
+        if (core != null && !core.isEmpty() && others.contains(core.toLowerCase())) {
+            return true;
+        }
+        if (raw == null) {
+            return false;
+        }
+        String lower = raw.toLowerCase();
+        for (String name : others) {
+            if (!name.isEmpty() && lower.contains(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String firstOtherPlayerTarget(MenuEntry[] entries) {
+        Player me = client.getLocalPlayer();
+        String mine = me != null ? Text.removeTags(me.getName()) : null;
+        if (entries == null) {
+            return null;
+        }
+        for (MenuEntry entry : entries) {
+            if (entry == null || !isPlayerMenu(entry.getType().getId())) {
+                continue;
+            }
+            String target = entry.getTarget();
+            String name = playerName(target);
+            if (mine != null && mine.equalsIgnoreCase(name)) {
+                continue;
+            }
+            if (!name.isEmpty() && !"???".equals(name)) {
+                return target;
+            }
+        }
+        return null;
     }
 
     private static boolean isPlayerMenu(int type) {
@@ -142,13 +226,16 @@ public class ImpostorActions {
 
     /**
      * MenuEntryAdded fires once per existing player row (Follow, Trade, …).
-     * Inserting on every row stacked Eliminate three times.
+     * Kept for tests; Eliminate itself now inserts from {@link #onMenuOpened}.
      */
     static boolean isFirstPlayerOption(int type) {
         return type == MenuAction.PLAYER_FIRST_OPTION.getId();
     }
 
     static String playerName(String target) {
+        if (target == null) {
+            return "";
+        }
         return Text.removeTags(target).replaceAll("(?i)\\s*\\(level-?\\d+\\)", "").trim();
     }
 

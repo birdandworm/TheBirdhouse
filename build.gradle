@@ -27,7 +27,7 @@ dependencies {
 }
 
 group = 'com.thebirdhouse'
-version = '1.4.7'
+version = '1.4.8'
 sourceCompatibility = '11'
 targetCompatibility = '11'
 

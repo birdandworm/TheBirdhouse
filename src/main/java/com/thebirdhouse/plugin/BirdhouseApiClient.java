@@ -196,6 +196,12 @@ public class BirdhouseApiClient {
             return true;
         }
         if (board.getTiles() != null && !board.getTiles().isEmpty()) {
+            String phase = board.getPhase();
+            // A live round with no role means the cache host is an older build.
+            // Fall through to the primary so Eliminate can still appear.
+            if ("round".equals(phase) && (board.getRole() == null || board.getRole().isEmpty())) {
+                return false;
+            }
             return true;
         }
         String phase = board.getPhase();
