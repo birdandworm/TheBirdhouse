@@ -18,7 +18,11 @@ import net.runelite.client.util.Text;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -84,7 +88,7 @@ public class ImpostorActions {
     }
 
     /**
-     * Insert Eliminate once the menu is fully built. Gating on PLAYER_FIRST_OPTION
+     * Insert an Eliminate per player once the menu is fully built. Gating on PLAYER_FIRST_OPTION
      * missed the verb whenever Follow was not the first player row — Walk here,
      * plugin lookups and a custom left-click all skip that opcode.
      */
@@ -100,13 +104,10 @@ public class ImpostorActions {
         if (room == null) {
             return;
         }
-        String target = firstOtherPlayerTarget(event.getMenuEntries());
-        if (target == null) {
-            return;
+        for (String name : otherPlayerNames(event.getMenuEntries())) {
+            insert(ELIMINATE, ColorUtil.wrapWithColorTag(name, Color.RED), () ->
+                runAction(apiClient.impostorKill(room, name)));
         }
-        String name = playerName(target);
-        insert(ELIMINATE, ColorUtil.wrapWithColorTag(name, Color.RED), () ->
-            runAction(apiClient.impostorKill(room, name)));
     }
 
     @Subscribe
@@ -197,39 +198,52 @@ public class ImpostorActions {
         return false;
     }
 
-    private String firstOtherPlayerTarget(MenuEntry[] entries) {
-        Player me = client.getLocalPlayer();
-        String mine = me != null ? Text.removeTags(me.getName()) : null;
+    /**
+     * Every distinct player under the cursor, in menu order. Taking only the first
+     * player row left a stack of crewmates on one tile reachable by whichever name
+     * RuneLite happened to list first, with no way to aim at the others. Names are
+     * de-duplicated so a player with several rows (Follow, Trade, a plugin lookup)
+     * still contributes a single Eliminate.
+     */
+    private Collection<String> otherPlayerNames(MenuEntry[] entries) {
         if (entries == null) {
-            return null;
+            return java.util.Collections.emptyList();
         }
+        List<String> targets = new ArrayList<>();
         for (MenuEntry entry : entries) {
-            if (entry == null || !isPlayerMenu(entry.getType().getId())) {
+            if (entry != null && isPlayerMenu(entry.getType().getId())) {
+                targets.add(entry.getTarget());
+            }
+        }
+        Player me = client.getLocalPlayer();
+        return distinctOtherNames(targets, me != null ? Text.removeTags(me.getName()) : null);
+    }
+
+    /**
+     * The filtering half of {@link #otherPlayerNames}, split out so it can be
+     * exercised without a live client.
+     */
+    static Collection<String> distinctOtherNames(List<String> playerTargets, String mine) {
+        Set<String> names = new LinkedHashSet<>();
+        if (playerTargets == null) {
+            return names;
+        }
+        for (String target : playerTargets) {
+            String name = playerName(target);
+            if (name.isEmpty() || "???".equals(name)) {
                 continue;
             }
-            String target = entry.getTarget();
-            String name = playerName(target);
             if (mine != null && mine.equalsIgnoreCase(name)) {
                 continue;
             }
-            if (!name.isEmpty() && !"???".equals(name)) {
-                return target;
-            }
+            names.add(name);
         }
-        return null;
+        return names;
     }
 
     private static boolean isPlayerMenu(int type) {
         return type >= MenuAction.PLAYER_FIRST_OPTION.getId()
             && type <= MenuAction.PLAYER_EIGHTH_OPTION.getId();
-    }
-
-    /**
-     * MenuEntryAdded fires once per existing player row (Follow, Trade, …).
-     * Kept for tests; Eliminate itself now inserts from {@link #onMenuOpened}.
-     */
-    static boolean isFirstPlayerOption(int type) {
-        return type == MenuAction.PLAYER_FIRST_OPTION.getId();
     }
 
     static String playerName(String target) {

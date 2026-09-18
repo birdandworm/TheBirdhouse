@@ -2,6 +2,7 @@ package com.thebirdhouse.plugin;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -38,10 +39,28 @@ public class ImpostorActionsTest {
     }
 
     @Test
-    public void eliminateIsOfferedOncePerMenuNotOncePerPlayerRow() {
-        assertTrue(ImpostorActions.isFirstPlayerOption(net.runelite.api.MenuAction.PLAYER_FIRST_OPTION.getId()));
-        assertFalse(ImpostorActions.isFirstPlayerOption(net.runelite.api.MenuAction.PLAYER_SECOND_OPTION.getId()));
-        assertFalse(ImpostorActions.isFirstPlayerOption(net.runelite.api.MenuAction.PLAYER_THIRD_OPTION.getId()));
+    public void eliminateIsOfferedOncePerPlayerNotOncePerMenuRow() {
+        // Follow, Trade and a plugin lookup are three rows for one crewmate.
+        assertEquals(
+            java.util.Arrays.asList("Toe Gaps"),
+            new java.util.ArrayList<>(ImpostorActions.distinctOtherNames(
+                java.util.Arrays.asList("Toe Gaps (level-99)", "Toe Gaps", "Toe Gaps (level-99)"),
+                "birdandworm")));
+    }
+
+    @Test
+    public void everyPlayerInAStackCanBeEliminated() {
+        assertEquals(
+            java.util.Arrays.asList("Toe Gaps", "Lost Motem"),
+            new java.util.ArrayList<>(ImpostorActions.distinctOtherNames(
+                java.util.Arrays.asList("Toe Gaps (level-99)", "Lost Motem (level-104)"),
+                "birdandworm")));
+    }
+
+    @Test
+    public void theImpostorIsNeverOfferedTheirOwnNameOrAMaskedOne() {
+        assertTrue(ImpostorActions.distinctOtherNames(
+            java.util.Arrays.asList("BirdAndWorm (level-99)", "???", ""), "birdandworm").isEmpty());
     }
 
     @Test
