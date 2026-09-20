@@ -72,6 +72,14 @@ public class ImpostorActionsTest {
     }
 
     @Test
+    public void eliminateRangeMatchesTheServerEightTiles() {
+        assertEquals(8, ImpostorActions.KILL_RANGE_TILES);
+        assertTrue(ImpostorActions.withinKillRange(100, 100, 0, 108, 100, 0));
+        assertFalse(ImpostorActions.withinKillRange(100, 100, 0, 109, 100, 0));
+        assertFalse(ImpostorActions.withinKillRange(100, 100, 0, 100, 100, 1));
+    }
+
+    @Test
     public void anotherGameTypeNeverOffersThem() {
         for (String type : new String[]{"bingo", "tilerace", "territory", "chipdrop", "battleship"}) {
             assertFalse(type, ImpostorActions.commandsAllowed(board(type, "round")));

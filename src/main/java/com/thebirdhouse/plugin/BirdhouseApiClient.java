@@ -640,6 +640,12 @@ public class BirdhouseApiClient {
         return postImpostorAction("/impostor-sabotage", body);
     }
 
+    public CompletableFuture<String> impostorMeeting(String roomCode) {
+        JsonObject body = new JsonObject();
+        body.addProperty("roomCode", roomCode);
+        return postImpostorAction("/impostor-meeting", body);
+    }
+
     /** Null on success, a player-facing reason on failure. */
     private CompletableFuture<String> postImpostorAction(String path, JsonObject body) {
         if (!hasAuthToken()) {

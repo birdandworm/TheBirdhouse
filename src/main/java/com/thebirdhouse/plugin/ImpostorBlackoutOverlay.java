@@ -42,9 +42,10 @@ public class ImpostorBlackoutOverlay extends Overlay {
     @Inject
     public ImpostorBlackoutOverlay() {
         setPosition(OverlayPosition.DYNAMIC);
-        // GPU draws names above the scene. ABOVE_SCENE left the real RSN sitting
-        // on top of our slab — the menu went to ??? and the plate did not.
-        setLayer(OverlayLayer.ABOVE_WIDGETS);
+        // GPU nameplates sit above widgets. ALWAYS_ON_TOP is the layer that
+        // actually covers them; ABOVE_WIDGETS still left the RSN leaking out
+        // the right of a too-small slab.
+        setLayer(OverlayLayer.ALWAYS_ON_TOP);
         setPriority(OverlayPriority.HIGHEST);
     }
 
@@ -81,10 +82,14 @@ public class ImpostorBlackoutOverlay extends Overlay {
     }
 
     static Rectangle slabFor(FontMetrics metrics, Point loc, String name) {
-        int width = Math.max(metrics.stringWidth(name), metrics.stringWidth("???")) + 40;
-        int height = metrics.getHeight() + 16;
-        // Pad left for the skull / iron / friend icon that sits beside the RSN.
-        return new Rectangle(loc.getX() - width / 2 - 12, loc.getY() - height + 6, width, height);
+        // GPU draws a larger font than the overlay's metrics, plus a combat /
+        // iron / friend icon to the left of the RSN. The last slab was sized
+        // to the overlay font and centered on it, so the real name sat in the
+        // open to the right — "??? …gertem". Cover a wide band instead.
+        int text = Math.max(metrics.stringWidth(name), metrics.stringWidth("???"));
+        int width = Math.max(220, text + 96);
+        int height = Math.max(28, metrics.getHeight() + 22);
+        return new Rectangle(loc.getX() - width / 2 - 24, loc.getY() - height + 10, width, height);
     }
 
     private static void paintMask(Graphics2D graphics, FontMetrics metrics, Point loc, String name) {

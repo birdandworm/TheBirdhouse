@@ -33,6 +33,10 @@ public class BoardData {
     // Eliminate does not vanish if a ping is late or a cache host omitted the ack field.
     private String role;
 
+    // True once this player has been dealt out. The board poll is slower than a
+    // position ack but it still has to be able to announce a death if pings stall.
+    private Boolean dead;
+
     // Tile Race: opponent positions
     private List<OpponentPosition> opponents;
 

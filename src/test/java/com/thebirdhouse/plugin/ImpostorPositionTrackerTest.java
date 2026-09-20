@@ -239,6 +239,14 @@ public class ImpostorPositionTrackerTest {
     }
 
     @Test
+    public void aStaleLobbyBoardDoesNotPinThePhaseAfterTheDeal() {
+        assertEquals("round", ImpostorPositionTracker.mergePhase("lobby", "round"));
+        assertEquals("round", ImpostorPositionTracker.mergePhase("round", "lobby"));
+        assertEquals("meeting", ImpostorPositionTracker.mergePhase("round", "meeting"));
+        assertEquals("lobby", ImpostorPositionTracker.mergePhase(null, "lobby"));
+    }
+
+    @Test
     public void aRoomWithNoPhaseStillHasADistinctKey() {
         // The key is computed on every poll, including when there is no board at all, so it
         // has to survive nulls rather than throwing inside the scheduler.

@@ -39,6 +39,13 @@ public class ImpostorActions {
     private static final String REPORT = "Report body";
     private static final String LIGHTS = "Cut the lights";
 
+    /**
+     * Same Chebyshev reach the server uses in {@code canKill}. The side panel and
+     * the right-click verb both stop at this number; the server is what actually
+     * decides, so a forged click still fails if the pings are farther apart.
+     */
+    static final int KILL_RANGE_TILES = 8;
+
     @Inject
     private Client client;
 
@@ -94,6 +101,9 @@ public class ImpostorActions {
      */
     @Subscribe
     public void onMenuOpened(MenuOpened event) {
+        if (tracker.isBlackout() && !tracker.isImpostor() && !tracker.isDead()) {
+            maskMenuNames();
+        }
         if (tracker.isDead() || !tracker.isImpostor()) {
             return;
         }
@@ -261,7 +271,18 @@ public class ImpostorActions {
         entry.onClick(e -> action.run());
     }
 
-    private void runAction(java.util.concurrent.CompletableFuture<String> future) {
+    /**
+     * Chebyshev distance, same as the server. Used to decide who the side panel
+     * offers — never as the kill itself.
+     */
+    static boolean withinKillRange(int x1, int y1, int plane1, int x2, int y2, int plane2) {
+        if (plane1 != plane2) {
+            return false;
+        }
+        return Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2)) <= KILL_RANGE_TILES;
+    }
+
+    void runAction(java.util.concurrent.CompletableFuture<String> future) {
         future.thenAccept(error -> {
             if (error == null || error.isEmpty()) {
                 return;

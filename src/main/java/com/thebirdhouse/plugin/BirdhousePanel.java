@@ -59,6 +59,7 @@ public class BirdhousePanel extends PluginPanel {
     private final ClientThread clientThread;
     private final TileIcons tileIcons;
     private final Notifier notifier;
+    private final ImpostorSidePanel impostorPanel;
 
     private final JPanel boardPanel;
     private final JPanel tilesPanel;
@@ -103,7 +104,7 @@ public class BirdhousePanel extends PluginPanel {
     public BirdhousePanel(BirdhouseConfig config, DropMatcher dropMatcher, BirdhouseApiClient apiClient,
                           ScreenshotHelper screenshotHelper, ConfigManager configManager,
                           Client client, ClientThread clientThread, TileIcons tileIcons,
-                          Notifier notifier) {
+                          Notifier notifier, ImpostorSidePanel impostorPanel) {
         super(false);
         this.config = config;
         this.notifier = notifier;
@@ -114,6 +115,7 @@ public class BirdhousePanel extends PluginPanel {
         this.client = client;
         this.clientThread = clientThread;
         this.tileIcons = tileIcons;
+        this.impostorPanel = impostorPanel;
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -198,6 +200,8 @@ public class BirdhousePanel extends PluginPanel {
         topSection.setBackground(ColorScheme.DARK_GRAY_COLOR);
         topSection.add(headerPanel);
         topSection.add(statusPanel);
+        impostorPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        topSection.add(impostorPanel);
 
         // Team chat sits under the board rather than replacing it: the point is to read a
         // reply without leaving whatever you were doing, which includes looking at tiles.
@@ -352,6 +356,7 @@ public class BirdhousePanel extends PluginPanel {
             scheduler = null;
         }
         tileIcons.clear();
+        impostorPanel.stop();
         SwingUtilities.invokeLater(() -> {
             if (boardWindow != null) {
                 boardWindow.dispose();
@@ -397,6 +402,7 @@ public class BirdhousePanel extends PluginPanel {
         lastStatus = message;
         lastProgress = "";
         lastStatusColor = color;
+        impostorPanel.onBoard(null);
 
         statusLabel.setText(message);
         statusLabel.setForeground(color);
@@ -735,9 +741,13 @@ public class BirdhousePanel extends PluginPanel {
 
     private void updatePanel(BoardData board, String roomCode) {
         List<BoardTile> tiles = board.getTiles();
-        if (tiles == null || tiles.isEmpty()) {
+        impostorPanel.onBoard(board);
+        if ((tiles == null || tiles.isEmpty()) && !"impostor".equals(board.getGameType())) {
             showIdleState("Room: " + roomCode + " (no tiles)", ColorScheme.LIGHT_GRAY_COLOR);
             return;
+        }
+        if (tiles == null) {
+            tiles = java.util.Collections.emptyList();
         }
 
         String gameType = board.getGameType();
@@ -774,6 +784,10 @@ public class BirdhousePanel extends PluginPanel {
             } else {
                 lastProgress = "Enemy fleet hidden until ships are placed";
             }
+        } else if ("impostor".equals(gameType)) {
+            lastProgress = tiles.isEmpty()
+                ? "Do your task in game"
+                : tiles.get(0).getName();
         } else {
             lastProgress = completed + " / " + total + " complete (" + remaining + " remaining)";
         }
@@ -784,16 +798,16 @@ public class BirdhousePanel extends PluginPanel {
         updateCountdown();
         startCountdownTimer();
 
-        BoardRenderer renderer = new BoardRenderer(PANEL_WIDTH, 0, 18, false);
-        renderer.setTileIcons(tileIcons);
-
         boardPanel.removeAll();
-        boardPanel.add(renderer.renderBoard(board), BorderLayout.CENTER);
+        tilesPanel.removeAll();
+        if (!tiles.isEmpty()) {
+            BoardRenderer renderer = new BoardRenderer(PANEL_WIDTH, 0, 18, false);
+            renderer.setTileIcons(tileIcons);
+            boardPanel.add(renderer.renderBoard(board), BorderLayout.CENTER);
+            renderer.renderTileList(board, tilesPanel);
+        }
         boardPanel.revalidate();
         boardPanel.repaint();
-
-        tilesPanel.removeAll();
-        renderer.renderTileList(board, tilesPanel);
         tilesPanel.revalidate();
         tilesPanel.repaint();
 

@@ -134,6 +134,7 @@ public class ImpostorPositionTracker {
         meeting = false;
         blackout = false;
         bodies = java.util.Collections.emptyList();
+        nearbyNames = java.util.Collections.emptyList();
     }
 
     /**
@@ -166,6 +167,7 @@ public class ImpostorPositionTracker {
         meeting = false;
         blackout = false;
         bodies = java.util.Collections.emptyList();
+        nearbyNames = java.util.Collections.emptyList();
     }
 
     /**
@@ -178,9 +180,17 @@ public class ImpostorPositionTracker {
     private volatile boolean blackout;
     private volatile java.util.List<ImpostorBody> bodies = java.util.Collections.emptyList();
 
+    /**
+     * Other players standing within {@link ImpostorActions#KILL_RANGE_TILES}. The side
+     * panel's Eliminate list is this and nothing else — a name that is not here cannot
+     * be clicked, and a name that is still has to pass the server's own range check.
+     */
+    private volatile java.util.List<String> nearbyNames = java.util.Collections.emptyList();
+
     @Subscribe
     public void onGameTick(GameTick event) {
         applyBoard(dropMatcher.getActiveBoard());
+        refreshNearby();
         if (!config.shareImpostorPosition() || !shouldSample(dropMatcher.getActiveBoard())) {
             latest = null;
             return;
@@ -245,9 +255,27 @@ public class ImpostorPositionTracker {
         if (board.getRole() != null && !board.getRole().isEmpty()) {
             role = board.getRole();
         }
-        if (board.getPhase() != null && !board.getPhase().isEmpty() && phase == null) {
-            phase = board.getPhase();
+        // A stale lobby board must not pin us there after the deal. Take round /
+        // meeting / done from the poll; only fill lobby when we have no phase yet.
+        phase = mergePhase(phase, board.getPhase());
+        if (Boolean.TRUE.equals(board.getDead())) {
+            announceDeath();
         }
+    }
+
+    /**
+     * Prefer a live phase from the poll over a leftover lobby, without letting a
+     * minute-old lobby overwrite a fresh ack that already said the round had started.
+     */
+    static String mergePhase(String live, String fromBoard) {
+        if (fromBoard == null || fromBoard.isEmpty()) {
+            return live;
+        }
+        if ("round".equals(fromBoard) || "meeting".equals(fromBoard)
+            || "done".equals(fromBoard) || "reveal".equals(fromBoard)) {
+            return fromBoard;
+        }
+        return live == null || live.isEmpty() ? fromBoard : live;
     }
 
     /**
@@ -374,7 +402,11 @@ public class ImpostorPositionTracker {
         }
 
         Sample now = latest;
-        if (!dueToSend(lastSent, now, since, tickMs, keepaliveMs)) {
+        // During blackout the victim only hears they are dead on the next ping.
+        // Standing still would wait out the keepalive (a minute) — longer than the
+        // lights stay out. Tick instead, so the death lands while names are still hidden.
+        long keep = blackout ? tickMs : keepaliveMs;
+        if (!dueToSend(lastSent, now, since, tickMs, keep)) {
             return;
         }
 
@@ -496,6 +528,49 @@ public class ImpostorPositionTracker {
 
     public java.util.List<ImpostorBody> getBodies() {
         return bodies;
+    }
+
+    /** Other players within kill range right now. Empty when logged out. */
+    public java.util.List<String> getNearbyNames() {
+        return nearbyNames;
+    }
+
+    private void refreshNearby() {
+        if (client.getGameState() != GameState.LOGGED_IN) {
+            nearbyNames = java.util.Collections.emptyList();
+            return;
+        }
+        Player me = client.getLocalPlayer();
+        WorldPoint here = me != null ? me.getWorldLocation() : null;
+        if (here == null) {
+            nearbyNames = java.util.Collections.emptyList();
+            return;
+        }
+        String mine = me.getName() != null ? net.runelite.client.util.Text.removeTags(me.getName()) : null;
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (Player other : client.getPlayers()) {
+            if (other == null || other == me || other.getName() == null) {
+                continue;
+            }
+            WorldPoint there = other.getWorldLocation();
+            if (there == null) {
+                continue;
+            }
+            if (!ImpostorActions.withinKillRange(
+                here.getX(), here.getY(), here.getPlane(),
+                there.getX(), there.getY(), there.getPlane())) {
+                continue;
+            }
+            String name = net.runelite.client.util.Text.removeTags(other.getName());
+            if (name.isEmpty() || "???".equals(name)) {
+                continue;
+            }
+            if (mine != null && mine.equalsIgnoreCase(name)) {
+                continue;
+            }
+            names.add(name);
+        }
+        nearbyNames = java.util.Collections.unmodifiableList(names);
     }
 
     public ImpostorBody bodyAt(int x, int y, int plane) {
