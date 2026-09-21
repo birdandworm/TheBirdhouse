@@ -18,19 +18,18 @@ import java.awt.Graphics2D;
  * has been eliminated with no standing indication of it, still doing tasks that no longer
  * count, still on a voice call they are supposed to be quiet on.
  *
- * DELIBERATELY NOT GATED ON {@code showOverlay}. Every other overlay in this plugin is a
- * convenience and switching it off costs the player nothing but convenience. This one carries
- * the rules of a game they agreed to play, and a ghost who cannot see it is a ghost who
- * forgets they are one. It renders only when there is something to say, which is the whole of
- * its right to ignore the setting.
+ * Honours {@code showOverlay}, the same switch as the tile-progress box. The side panel
+ * still says they are out if they hide this.
  */
 public class ImpostorDeathOverlay extends OverlayPanel {
 
     private final ImpostorPositionTracker tracker;
+    private final BirdhouseConfig config;
 
     @Inject
-    public ImpostorDeathOverlay(ImpostorPositionTracker tracker) {
+    public ImpostorDeathOverlay(ImpostorPositionTracker tracker, BirdhouseConfig config) {
         this.tracker = tracker;
+        this.config = config;
 
         // Top centre, because it is competing with a fight for attention and has to win.
         // Everything else this plugin draws sits top left and can be politely ignored; this
@@ -42,7 +41,7 @@ public class ImpostorDeathOverlay extends OverlayPanel {
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        if (!tracker.isDead()) {
+        if (!config.showOverlay() || !tracker.isDead()) {
             return null;
         }
 

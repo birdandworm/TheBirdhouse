@@ -7,6 +7,7 @@ import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 
 import javax.inject.Inject;
@@ -127,7 +128,7 @@ public class BirdhousePanel extends PluginPanel {
 
         JLabel titleLabel = new JLabel("The Birdhouse");
         titleLabel.setForeground(BoardRenderer.COLOR_BRAND);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 16f));
+        titleLabel.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 16f));
         headerPanel.add(titleLabel, BorderLayout.WEST);
 
         JPanel headerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -155,19 +156,19 @@ public class BirdhousePanel extends PluginPanel {
 
         statusLabel = new JLabel("Not connected");
         statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        statusLabel.setFont(statusLabel.getFont().deriveFont(12f));
+        statusLabel.setFont(FontManager.getDefaultFont().deriveFont(12f));
         statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         statusPanel.add(statusLabel);
 
         progressLabel = new JLabel("");
         progressLabel.setForeground(new Color(150, 200, 100));
-        progressLabel.setFont(progressLabel.getFont().deriveFont(Font.BOLD, 13f));
+        progressLabel.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 13f));
         progressLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         statusPanel.add(progressLabel);
 
         countdownLabel = new JLabel("");
         countdownLabel.setForeground(new Color(255, 180, 80));
-        countdownLabel.setFont(countdownLabel.getFont().deriveFont(11f));
+        countdownLabel.setFont(FontManager.getDefaultFont().deriveFont(11f));
         countdownLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         statusPanel.add(countdownLabel);
 
@@ -785,8 +786,8 @@ public class BirdhousePanel extends PluginPanel {
                 lastProgress = "Enemy fleet hidden until ships are placed";
             }
         } else if ("impostor".equals(gameType)) {
-            lastProgress = tiles.isEmpty()
-                ? "Do your task in game"
+            lastProgress = ended || tiles.isEmpty()
+                ? ""
                 : tiles.get(0).getName();
         } else {
             lastProgress = completed + " / " + total + " complete (" + remaining + " remaining)";

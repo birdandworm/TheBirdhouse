@@ -77,7 +77,7 @@ public class ChatPanel extends JPanel {
 
         titleLabel = new JLabel("Team Chat");
         titleLabel.setForeground(Color.WHITE);
-        titleLabel.setFont(FontManager.getRunescapeBoldFont());
+        titleLabel.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 14f));
         titleLabel.setBorder(new EmptyBorder(0, 2, 2, 2));
         add(titleLabel, BorderLayout.NORTH);
 
@@ -122,7 +122,7 @@ public class ChatPanel extends JPanel {
 
         statusLabel = new JLabel(" ");
         statusLabel.setForeground(COLOR_MUTED);
-        statusLabel.setFont(FontManager.getRunescapeSmallFont());
+        statusLabel.setFont(FontManager.getDefaultFont().deriveFont(12f));
         statusLabel.setBorder(new EmptyBorder(1, 2, 0, 2));
         bottom.add(statusLabel, BorderLayout.SOUTH);
 
@@ -198,7 +198,7 @@ public class ChatPanel extends JPanel {
         if (messages.isEmpty()) {
             JLabel empty = new JLabel("No messages yet.");
             empty.setForeground(COLOR_MUTED);
-            empty.setFont(FontManager.getRunescapeSmallFont());
+            empty.setFont(FontManager.getDefaultFont().deriveFont(12f));
             empty.setAlignmentX(Component.LEFT_ALIGNMENT);
             messagesPanel.add(empty);
         } else {
@@ -228,7 +228,7 @@ public class ChatPanel extends JPanel {
         JLabel note = new JLabel(BoardRenderer.wrapHtml(
             BoardRenderer.escapeHtml(reason), wrapWidth, "left"));
         note.setForeground(COLOR_MUTED);
-        note.setFont(FontManager.getRunescapeSmallFont());
+        note.setFont(FontManager.getDefaultFont().deriveFont(12f));
         note.setAlignmentX(Component.LEFT_ALIGNMENT);
         messagesPanel.add(note);
         messagesPanel.revalidate();
@@ -254,7 +254,7 @@ public class ChatPanel extends JPanel {
 
         JLabel header = new JLabel(name + "  " + clock(m.getTimestamp()));
         header.setForeground(mine ? COLOR_SELF : COLOR_OTHER);
-        header.setFont(FontManager.getRunescapeSmallFont());
+        header.setFont(FontManager.getDefaultFont().deriveFont(12f));
         header.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.add(header);
 
@@ -277,7 +277,7 @@ public class ChatPanel extends JPanel {
 
         JLabel textLabel = new JLabel(BoardRenderer.wrapHtml(body.toString(), wrapWidth, "left"));
         textLabel.setForeground(Color.WHITE);
-        textLabel.setFont(FontManager.getRunescapeSmallFont());
+        textLabel.setFont(FontManager.getDefaultFont().deriveFont(12f));
         textLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.add(textLabel);
 

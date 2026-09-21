@@ -222,7 +222,7 @@ public interface BirdhouseConfig extends Config {
     @ConfigItem(
         keyName = "showOverlay",
         name = "Show Overlay",
-        description = "Display tile progress overlay on the game screen",
+        description = "Show the tile-progress box and Impostor notices (eliminated, meeting, lights out) on the game screen",
         section = dropsSection,
         position = 3
     )

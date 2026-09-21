@@ -40,7 +40,7 @@ public class TeamStatusPanel extends JPanel {
 
         titleLabel = new JLabel("Team Status");
         titleLabel.setForeground(Color.WHITE);
-        titleLabel.setFont(FontManager.getRunescapeBoldFont());
+        titleLabel.setFont(FontManager.getDefaultFont().deriveFont(Font.BOLD, 14f));
         titleLabel.setBorder(new EmptyBorder(0, 2, 2, 2));
         add(titleLabel, BorderLayout.NORTH);
 
@@ -59,7 +59,7 @@ public class TeamStatusPanel extends JPanel {
 
         summaryLabel = new JLabel(" ");
         summaryLabel.setForeground(COLOR_MUTED);
-        summaryLabel.setFont(FontManager.getRunescapeSmallFont());
+        summaryLabel.setFont(FontManager.getDefaultFont().deriveFont(12f));
         summaryLabel.setBorder(new EmptyBorder(1, 2, 0, 2));
         add(summaryLabel, BorderLayout.SOUTH);
 
@@ -120,7 +120,7 @@ public class TeamStatusPanel extends JPanel {
         JLabel note = new JLabel(BoardRenderer.wrapHtml(
             BoardRenderer.escapeHtml(message), wrapWidth, "left"));
         note.setForeground(color != null ? color : COLOR_MUTED);
-        note.setFont(FontManager.getRunescapeSmallFont());
+        note.setFont(FontManager.getDefaultFont().deriveFont(12f));
         note.setAlignmentX(Component.LEFT_ALIGNMENT);
         listPanel.add(note);
         listPanel.revalidate();
@@ -136,18 +136,18 @@ public class TeamStatusPanel extends JPanel {
 
         JLabel dot = new JLabel("\u25CF");
         dot.setForeground(m.isOnline() ? COLOR_ONLINE : COLOR_OFFLINE);
-        dot.setFont(FontManager.getRunescapeSmallFont());
+        dot.setFont(FontManager.getDefaultFont().deriveFont(12f));
         row.add(dot, BorderLayout.WEST);
 
         String name = m.getName() != null ? m.getName() : "?";
         JLabel nameLabel = new JLabel(name);
         nameLabel.setForeground(m.isSelf() ? COLOR_SELF : Color.WHITE);
-        nameLabel.setFont(FontManager.getRunescapeSmallFont());
+        nameLabel.setFont(FontManager.getDefaultFont().deriveFont(12f));
         row.add(nameLabel, BorderLayout.CENTER);
 
         JLabel status = new JLabel(statusText(m));
         status.setForeground(m.isOnline() ? COLOR_ONLINE : COLOR_OFFLINE);
-        status.setFont(FontManager.getRunescapeSmallFont());
+        status.setFont(FontManager.getDefaultFont().deriveFont(12f));
         status.setHorizontalAlignment(SwingConstants.RIGHT);
         row.add(status, BorderLayout.EAST);
 

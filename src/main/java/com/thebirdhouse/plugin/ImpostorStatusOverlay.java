@@ -22,13 +22,16 @@ public class ImpostorStatusOverlay extends OverlayPanel {
     private ImpostorPositionTracker tracker;
 
     @Inject
+    private BirdhouseConfig config;
+
+    @Inject
     public ImpostorStatusOverlay() {
         setPosition(OverlayPosition.TOP_CENTER);
     }
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        if (tracker.isDead()) {
+        if (!config.showOverlay() || tracker.isDead()) {
             return null;
         }
         if (tracker.isMeeting()) {

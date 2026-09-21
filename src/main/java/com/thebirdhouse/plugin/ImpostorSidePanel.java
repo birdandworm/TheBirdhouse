@@ -2,6 +2,7 @@ package com.thebirdhouse.plugin;
 
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.ui.PluginPanel;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -17,6 +18,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -63,11 +65,11 @@ public class ImpostorSidePanel extends JPanel {
 
         JLabel title = new JLabel("The Impostor");
         title.setForeground(Color.WHITE);
-        title.setFont(FontManager.getRunescapeBoldFont());
+        title.setFont(uiFont(Font.BOLD, 14f));
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(title);
 
-        statusLabel.setFont(FontManager.getRunescapeBoldFont());
+        statusLabel.setFont(uiFont(Font.BOLD, 13f));
         add(statusLabel);
         add(taskLabel);
         add(hintLabel);
@@ -131,10 +133,10 @@ public class ImpostorSidePanel extends JPanel {
         lastFingerprint = fingerprint;
 
         if (dead) {
-            statusLabel.setText("You are out. Stay muted.");
+            setWrapped(statusLabel, "You are out. Stay muted.");
             statusLabel.setForeground(COLOR_DEAD);
-            taskLabel.setText(" ");
-            hintLabel.setText("Nothing you do from here counts.");
+            setWrapped(taskLabel, " ");
+            setWrapped(hintLabel, "Nothing you do from here counts.");
             hintLabel.setForeground(COLOR_MUTED);
             verbs.removeAll();
             revalidate();
@@ -143,10 +145,10 @@ public class ImpostorSidePanel extends JPanel {
         }
 
         if (meeting) {
-            statusLabel.setText("Meeting — vote on the website");
+            setWrapped(statusLabel, "Meeting — vote on the website");
             statusLabel.setForeground(new Color(255, 180, 80));
-            taskLabel.setText(task);
-            hintLabel.setText(" ");
+            setWrapped(taskLabel, task.isEmpty() ? " " : task);
+            setWrapped(hintLabel, " ");
             verbs.removeAll();
             revalidate();
             repaint();
@@ -154,18 +156,18 @@ public class ImpostorSidePanel extends JPanel {
         }
 
         if (impostor) {
-            statusLabel.setText("You are the impostor");
+            setWrapped(statusLabel, "You are the impostor");
             statusLabel.setForeground(COLOR_IMPOSTOR);
         } else {
-            statusLabel.setText("You are crew");
+            setWrapped(statusLabel, "You are crew");
             statusLabel.setForeground(new Color(120, 200, 255));
         }
-        taskLabel.setText(task.isEmpty() ? " " : task);
+        setWrapped(taskLabel, task.isEmpty() ? " " : task);
         taskLabel.setForeground(Color.WHITE);
 
         verbs.removeAll();
         if (!round) {
-            hintLabel.setText("Waiting for the round to start.");
+            setWrapped(hintLabel, "Waiting for the round to start.");
             hintLabel.setForeground(COLOR_MUTED);
             revalidate();
             repaint();
@@ -174,10 +176,10 @@ public class ImpostorSidePanel extends JPanel {
 
         if (impostor) {
             if (nearby.isEmpty()) {
-                hintLabel.setText("Stand within 8 tiles of someone to eliminate them. The server checks.");
+                setWrapped(hintLabel, "Stand within 8 tiles of someone to eliminate them. The server checks.");
                 hintLabel.setForeground(COLOR_MUTED);
             } else {
-                hintLabel.setText("Next to you — eliminate still has to land on the server.");
+                setWrapped(hintLabel, "Next to you — eliminate still has to land on the server.");
                 hintLabel.setForeground(COLOR_MUTED);
                 for (String name : nearby) {
                     verbs.add(verb("Eliminate " + name, COLOR_IMPOSTOR, () -> {
@@ -193,7 +195,7 @@ public class ImpostorSidePanel extends JPanel {
             verbs.add(verb("Cut the lights", Color.WHITE, () ->
                 actions.runAction(apiClient.impostorSabotage(room))));
         } else {
-            hintLabel.setText(blackout
+            setWrapped(hintLabel, blackout
                 ? "Lights out. Names are hidden."
                 : "Report a body when you find one, or call everyone in.");
             hintLabel.setForeground(COLOR_MUTED);
@@ -223,6 +225,7 @@ public class ImpostorSidePanel extends JPanel {
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
         button.setForeground(fg);
+        button.setFont(uiFont(Font.PLAIN, 12f));
         button.setFocusPainted(false);
         button.addActionListener(e -> action.run());
         return button;
@@ -250,8 +253,32 @@ public class ImpostorSidePanel extends JPanel {
     private static JLabel line() {
         JLabel label = new JLabel(" ");
         label.setForeground(COLOR_MUTED);
+        label.setFont(uiFont(Font.PLAIN, 12f));
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // BoxLayout ignores wrap unless the label is width-capped.
+        label.setMaximumSize(new Dimension(PluginPanel.PANEL_WIDTH, Integer.MAX_VALUE));
         return label;
+    }
+
+    /**
+     * The RuneScape bitmap font ghosts its last letters when Swing draws it in
+     * the sidebar. DefaultFont is what the rest of the panel already uses for
+     * anything that has to be readable at 225px.
+     */
+    private static Font uiFont(int style, float size) {
+        return FontManager.getDefaultFont().deriveFont(style, size);
+    }
+
+    private static void setWrapped(JLabel label, String text) {
+        if (text == null || text.isBlank()) {
+            label.setText(" ");
+            return;
+        }
+        label.setText("<html><div style='width:190px'>" + escapeHtml(text) + "</div></html>");
+    }
+
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /** Exposed for tests — the panel never lists anyone outside this set. */
