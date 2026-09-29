@@ -444,8 +444,8 @@ public class DropMatcher {
         // A kill credit has no item behind it, so there is nothing to price.
         if (itemId <= 0) return 0;
         try {
-            int price = itemManager.getItemPrice(itemId);
-            return (long) Math.max(0, price) * Math.max(0, quantity);
+            long price = itemManager.getItemPrice(itemId);
+            return Math.max(0L, price) * Math.max(0, quantity);
         } catch (Exception e) {
             return 0;
         }

@@ -71,19 +71,19 @@ public class ClanLootReporter {
 
         for (ItemStack stack : event.getItems()) {
             ItemComposition comp = itemManager.getItemComposition(stack.getId());
-            int price = 0;
+            long price = 0;
             try {
                 price = itemManager.getItemPrice(stack.getId());
             } catch (Exception ignored) {
             }
-            long stackVal = (long) Math.max(0, price) * Math.max(0, stack.getQuantity());
+            long stackVal = Math.max(0L, price) * Math.max(0, stack.getQuantity());
             totalValue += stackVal;
 
             JsonObject item = new JsonObject();
             item.addProperty("name", comp.getName());
             item.addProperty("id", stack.getId());
             item.addProperty("quantity", stack.getQuantity());
-            item.addProperty("priceEach", Math.max(0, price));
+            item.addProperty("priceEach", Math.max(0L, price));
             items.add(item);
         }
 

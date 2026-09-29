@@ -147,13 +147,13 @@ public class ActivityTracker {
         long eventValue = 0;
         long topStack = 0;
         for (ItemStack stack : event.getItems()) {
-            int price = 0;
+            long price = 0;
             try {
                 price = itemManager.getItemPrice(stack.getId());
             } catch (Exception ignored) {
                 // Untradeable / unknown item — worth 0.
             }
-            long stackVal = (long) Math.max(0, price) * Math.max(0, stack.getQuantity());
+            long stackVal = Math.max(0L, price) * Math.max(0, stack.getQuantity());
             eventValue += stackVal;
             if (stackVal > topStack) topStack = stackVal;
         }
